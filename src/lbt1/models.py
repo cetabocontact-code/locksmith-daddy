@@ -29,9 +29,11 @@ class KeyType(str, Enum):
 PART_NAME_TO_KEY_TYPE: dict[str, KeyType] = {
     "fob smart key": KeyType.SMART_KEY,
     "smart key": KeyType.SMART_KEY,
+    "fob assy": KeyType.SMART_KEY,            # Toyota newer smart keys
     "transmitter": KeyType.TRANSMITTER,
     "transmitter/tranciever": KeyType.TRANSMITTER,
     "keyless entry transmitter": KeyType.KEYLESS_ENTRY_TX,
+    "remote control transmitter": KeyType.REMOTE_CONTROL,  # Toyota flip keys
     "remote control": KeyType.REMOTE_CONTROL,
     "keyless lock pad": KeyType.KEYLESS_LOCK_PAD,
 }

@@ -234,6 +234,33 @@ class OempartsonlineDriver:
             await self._emit("Picked trim via NHTSA disambiguation", "success", full)
             return full
 
+        # Bug #2 mitigation (2026-05-29): when the dealer returns a
+        # placeholder `/v?vin=...` page with no year-segment candidates,
+        # the server may still be doing an async lookup. ~30% recovery
+        # rate by re-fetching the final_url after a 3s delay. Costs ~84
+        # extra credits per failing edge case but lifts coverage on
+        # otherwise-unresolvable VINs. Only retry once.
+        if "/v?vin=" in result.final_url:
+            await self._emit("Placeholder page detected, retrying after 3s",
+                             "info", result.final_url)
+            import asyncio
+            await asyncio.sleep(3)
+            result2 = await self.backend.fetch(result.final_url)
+            if result2.ok:
+                if _is_fully_resolved_vehicle_url(result2.final_url):
+                    clean = _strip_query_and_fragment(result2.final_url)
+                    await self._emit("Landed on vehicle page (after retry)",
+                                     "success", clean)
+                    return clean
+                soup2 = BeautifulSoup(result2.html, "lxml")
+                vehicle_href = self._find_vehicle_link(soup2, profile)
+                if vehicle_href:
+                    full = _strip_query_and_fragment(
+                        urljoin(result2.final_url, vehicle_href))
+                    await self._emit("Picked trim via NHTSA (after retry)",
+                                     "success", full)
+                    return full
+
         await self._emit(
             "Dealer + NHTSA could not resolve VIN to a specific trim",
             "warning",

@@ -21,6 +21,7 @@ from lbt1.scrapers.kia import KiaOempartsDriver
 from lbt1.scrapers.simplepart import (
     HyundaiCanadaDriver, KiaUsOfficialDriver, SimplepartDriver,
 )
+from lbt1.scrapers.toyota import ToyotaOempartsDriver
 from lbt1.vin import decoder, validator
 
 log = logging.getLogger(__name__)
@@ -222,6 +223,8 @@ def _drivers_for_make(make: str) -> list[type]:
         return [HyundaiOempartsDriver, HyundaiOemPartDriver, HyundaiCanadaDriver]
     if m == "genesis":
         return [GenesisOempartsDriver]
+    if m == "toyota":
+        return [ToyotaOempartsDriver]  # tier 1; SimplePart parts.toyota.com TBD
     return []
 
 
