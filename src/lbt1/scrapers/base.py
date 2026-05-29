@@ -291,7 +291,13 @@ class OempartsonlineDriver:
             elif "all" in dt or "awd" in dt: drive_short = "awd"
             elif "4wd" in dt or "4x4" in dt: drive_short = "4wd"
 
-        # PASS 1 — filter to make + model only.
+        # PASS 1 — filter to make + model + YEAR. The year requirement is
+        # critical (2026-05-29 diagnostic finding): year-less stub URLs like
+        # `/v-hyundai-sonata` are "browse navigation" links the dealer shows
+        # for catalog navigation, NOT real vehicle pages. If we pick one,
+        # category sweeps 404 because there's no real vehicle context.
+        # Real vehicle URLs always follow `/v-{YYYY}-{make}-{model}[...]`.
+        profile_year_str = str(profile.year) if profile.year else ""
         filtered: list[tuple[str, dict]] = []
         for el in candidates:
             href = el.get("href") or ""
@@ -307,7 +313,11 @@ class OempartsonlineDriver:
             model_ok = (not model_slug) or (
                 model_slug in href_lc or model_slug in data_model
             )
-            if make_ok and model_ok:
+            # Year requirement: the path between `/v-` and the next `-` must
+            # be a 4-digit year. Rejects `/v-hyundai-sonata` (no year) but
+            # accepts `/v-2024-hyundai-sonata` and trimmed variants.
+            year_ok = _has_year_segment(href_lc, profile_year_str)
+            if make_ok and model_ok and year_ok:
                 filtered.append((href, {
                     "trim_attr": (el.get("data-trim") or "").lower(),
                     "engine_attr": (el.get("data-engine") or "").lower(),
@@ -623,6 +633,27 @@ def _is_fully_resolved_vehicle_url(url: str) -> bool:
     # '--' (double-dash) which only appears at trim/engine separators.
     after_v = path.split("/v-", 1)[1]
     return "--" in after_v
+
+
+def _has_year_segment(href_lc: str, profile_year_str: str = "") -> bool:
+    """True iff the URL contains a 4-digit year segment right after `/v-`.
+
+    Real vehicle URLs follow `/v-{YYYY}-{make}-{model}[--{trim}--{engine}]`.
+    Year-less stubs like `/v-hyundai-sonata` are dealer "browse navigation"
+    links — not real vehicle pages. Picking one of these stubs causes the
+    category sweep to 404, costing ~50 ScrapFly credits per failed lookup.
+
+    When profile_year_str is provided, ALSO requires the URL's year to
+    match — prevents accidentally picking last year's catalog entry from
+    a multi-year search-result page. Pass "" to accept any 4-digit year.
+    """
+    import re
+    m = re.search(r"/v-(\d{4})-", href_lc)
+    if not m:
+        return False
+    if profile_year_str and m.group(1) != profile_year_str:
+        return False
+    return True
 
 
 def _extract_trim_slug_from_href(href: str, model_slug: str) -> str:
