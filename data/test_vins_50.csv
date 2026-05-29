@@ -1,0 +1,9 @@
+VIN,expected_pns
+# Paste 50 VINs below — one per row.
+# The "expected_pns" column is optional: if filled, the report will compare
+# them against what the scraper returned. Use comma-separated PNs.
+#
+# Examples (these match the training set, you can replace them):
+# 5XYK6CDF8TG390982,"95440-P1AB0, 95440-P1AL0"
+# 5XYP5DHC5NG256061,"95440-S9200, 95440-S9000"
+# 5XYPHDA52JG374761,"95440-C6000, 95430-C5100"

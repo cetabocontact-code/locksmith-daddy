@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Subscribe to Pro · {{ site_brand }}</title>
+  <style>
+    :root { --bg: #0f1419; --panel: #1a2027; --border: #2a3441; --text: #e6edf3; --muted: #8b949e; --accent: #ff6b35; --green: #3fb950; --red: #f85149; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 24px; line-height: 1.5; }
+    .wrap { max-width: 480px; margin: 60px auto; }
+    h1 { font-size: 28px; margin: 0 0 6px 0; }
+    .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 28px; }
+    .price { font-size: 42px; font-weight: 700; margin: 8px 0; }
+    .price .strike { color: var(--muted); text-decoration: line-through; font-size: 22px; font-weight: 400; margin-right: 10px; vertical-align: middle; }
+    .price .accent { color: var(--accent); }
+    .price .period { font-size: 14px; color: var(--muted); font-weight: 400; }
+    .founder-tag { display: inline-block; background: rgba(63,185,80,0.15); color: var(--green); font-size: 11px; padding: 4px 10px; border-radius: 12px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
+    ul.features { list-style: none; padding: 0; margin: 20px 0 20px 0; font-size: 14px; }
+    ul.features li { padding: 8px 0; border-bottom: 1px solid var(--border); }
+    ul.features li:last-child { border-bottom: 0; }
+    ul.features li::before { content: "✓ "; color: var(--green); font-weight: 700; }
+    button.primary { width: 100%; background: var(--accent); color: #fff; border: 0; padding: 13px; border-radius: 6px; font-size: 16px; font-weight: 600; cursor: pointer; }
+    .nope { color: var(--muted); font-size: 12px; margin-top: 12px; text-align: center; }
+    .back { text-align: center; margin-top: 20px; }
+    .back a { color: var(--muted); font-size: 13px; }
+    .warning { background: rgba(248,81,73,0.1); border: 1px solid rgba(248,81,73,0.3); color: var(--red); padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Upgrade to Pro</h1>
+    <div class="subtitle">10 free lookups used. Keep going with unlimited dealer-verified VIN lookups.</div>
+
+    <div id="error-banner"></div>
+
+    <div class="card">
+      <div id="founder-tag-slot"></div>
+      <div class="price" id="price-display">
+        <span class="strike" id="strike" style="display:none">$<span id="regular">{{ regular_price }}</span></span>
+        <span class="accent">$<span id="price">{{ price }}</span></span>
+        <span class="period">/month</span>
+      </div>
+      <div style="color: var(--muted); font-size: 13px;" id="price-note"></div>
+      <ul class="features">
+        <li>Unlimited VIN lookups</li>
+        <li>Dealer-verified OEM key part numbers</li>
+        <li>Search history + CSV export</li>
+        <li>Priority queue (faster results)</li>
+        <li>Email support</li>
+        <li>Kia + Hyundai + Genesis (more makes coming)</li>
+      </ul>
+      <form method="post" action="/subscribe/checkout">
+        <button type="submit" class="primary" id="subscribe-btn">Continue to checkout</button>
+      </form>
+      <div class="nope">Apple Pay and Google Pay supported · Cancel anytime · Secured by Stripe</div>
+    </div>
+
+    <div class="back"><a href="/">← Back to lookup</a></div>
+  </div>
+
+  <script>
+    (function() {
+      const params = new URLSearchParams(window.location.search);
+      const err = params.get('error');
+      if (err) {
+        const div = document.createElement('div');
+        div.className = 'warning';
+        div.textContent = err;
+        document.getElementById('error-banner').appendChild(div);
+      }
+
+      const isFounder = "{{ is_founder }}" === "true";
+      const founderNum = "{{ founder_number }}";
+      const discountPct = "{{ discount_pct }}";
+      const slotsRemaining = parseInt("{{ slots_remaining }}", 10);
+
+      if (isFounder) {
+        document.getElementById('founder-tag-slot').innerHTML =
+          '<span class="founder-tag">Founder #' + founderNum + ' — ' + discountPct + '% off forever</span>';
+        document.getElementById('strike').style.display = 'inline';
+        document.getElementById('price-note').textContent =
+          'Founder pricing locked for life. Cancel anytime.';
+      } else if (slotsRemaining === 0) {
+        document.getElementById('price-note').textContent =
+          'Founder spots are sold out. Standard Pro pricing applies.';
+      }
+
+      if ("{{ stripe_enabled }}" === "false") {
+        document.getElementById('subscribe-btn').disabled = true;
+        document.getElementById('subscribe-btn').textContent = "Stripe checkout coming soon";
+        document.getElementById('subscribe-btn').style.opacity = "0.5";
+      }
+    })();
+  </script>
+</body>
+</html>

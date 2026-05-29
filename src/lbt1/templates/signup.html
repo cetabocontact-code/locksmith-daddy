@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create account · Locksmith Daddy</title>
+  <style>
+    :root { --bg: #0f1419; --panel: #1a2027; --border: #2a3441; --text: #e6edf3; --muted: #8b949e; --accent: #ff6b35; --red: #f85149; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 24px; line-height: 1.5; }
+    .auth-wrap { max-width: 480px; margin: 40px auto; }
+    h1 { font-size: 26px; margin: 0 0 4px 0; font-weight: 600; }
+    .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 24px; }
+    label { display: block; color: var(--muted); font-size: 13px; margin-bottom: 4px; margin-top: 14px; }
+    label:first-of-type { margin-top: 0; }
+    label .opt { color: var(--muted); font-style: italic; }
+    input[type=email], input[type=password], input[type=text], input[type=tel] {
+      width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; font-size: 15px; font-family: inherit;
+    }
+    input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    .row { display: flex; gap: 12px; }
+    .row > div { flex: 1; }
+    button.primary { width: 100%; margin-top: 18px; background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 11px; font-size: 15px; font-weight: 600; cursor: pointer; }
+    .checkbox-row { margin-top: 14px; display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: var(--muted); }
+    .checkbox-row input { margin-top: 3px; }
+    .meta { margin-top: 16px; font-size: 13px; color: var(--muted); text-align: center; }
+    .meta a { color: var(--accent); text-decoration: none; }
+    .meta a:hover { text-decoration: underline; }
+    .error { background: rgba(248, 81, 73, 0.1); border: 1px solid rgba(248, 81, 73, 0.3); color: var(--red); padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; font-size: 13px; }
+    .footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 24px; }
+    .hint { color: var(--muted); font-size: 11px; margin-top: 4px; }
+    .privacy-block {
+      margin-top: 18px; padding: 10px 12px;
+      background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+      font-size: 12px; color: var(--muted); line-height: 1.55;
+    }
+    .privacy-block strong { color: var(--text); }
+    .privacy-block a { color: var(--accent); text-decoration: none; }
+    .trial-note {
+      margin-top: 12px; text-align: center;
+      color: var(--muted); font-size: 12px;
+    }
+    .trial-note strong { color: var(--accent); }
+    .founder-badge {
+      margin-top: 14px; padding: 10px 14px;
+      background: linear-gradient(135deg, rgba(255,107,53,0.10), rgba(255,107,53,0.02));
+      border: 1px solid rgba(255,107,53,0.35); border-radius: 6px;
+      font-size: 12px; color: var(--text); text-align: center;
+    }
+    .founder-badge strong { color: var(--accent); }
+    .founder-badge.sold-out {
+      background: rgba(139,148,158,0.08);
+      border-color: var(--border); color: var(--muted);
+    }
+    .founder-discount { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="auth-wrap">
+    <h1>Create account</h1>
+    <div class="subtitle">For certified automotive locksmiths.</div>
+
+    <div class="card">
+      <form method="post" action="/signup">
+        <label for="full_name">Full name</label>
+        <input id="full_name" name="full_name" type="text" autocomplete="name" required>
+
+        <div class="row">
+          <div>
+            <label for="email">Email</label>
+            <input id="email" name="email" type="email" autocomplete="email" required>
+          </div>
+          <div>
+            <label for="phone">Phone</label>
+            <input id="phone" name="phone" type="tel" autocomplete="tel" required>
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label for="state_lic">State license #</label>
+            <input id="state_lic" name="state_lic" type="text" required>
+          </div>
+          <div>
+            <label for="locksmith_lic">Locksmith license # <span class="opt">(optional)</span></label>
+            <input id="locksmith_lic" name="locksmith_lic" type="text">
+          </div>
+        </div>
+        <div class="hint">Some states don't require a locksmith license — leave blank if yours doesn't.</div>
+
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required>
+        <div class="hint">At least 8 characters.</div>
+
+        <div class="privacy-block">
+          <strong>Your contact info is stored.</strong>
+          We keep your name, email, phone, and license number so we can verify
+          you, deliver lookups, send transactional emails (password reset, billing,
+          trial status), and protect against abuse. Read the full
+          <a href="/privacy" target="_blank">privacy notice</a>.
+        </div>
+
+        <div class="checkbox-row">
+          <input id="privacy_consent" name="privacy_consent" type="checkbox" value="1" required>
+          <label for="privacy_consent" style="margin: 0; color: var(--text);">
+            <strong>Required:</strong> I understand my contact information will
+            be stored and used to provide the service.
+          </label>
+        </div>
+
+        <div class="checkbox-row">
+          <input id="marketing" name="marketing" type="checkbox" value="1">
+          <label for="marketing" style="margin: 0; color: var(--text);">
+            <strong>Optional:</strong> Add me to the marketing list so I get
+            updates when new tools, new makes, or important locksmith resources
+            ship. No daily emails. Unsubscribe anytime.
+          </label>
+        </div>
+
+        <button type="submit" class="primary">Sign up</button>
+        <div class="trial-note">
+          Free beta access: <strong>10 VIN lookups</strong>, no time limit.
+        </div>
+        <div id="founder-badge" class="founder-badge">
+          <strong>Founder spots:</strong>
+          <span id="founder-remaining">…</span> of <span id="founder-total">100</span> remaining
+          <span class="founder-discount">— <strong>50% off Pro forever</strong></span>
+        </div>
+      </form>
+
+      <div class="meta">
+        Already have an account? <a href="/signin">Sign in</a>
+      </div>
+    </div>
+
+    <div class="footer">For certified locksmiths only.</div>
+  </div>
+
+  <script>
+    (function() {
+      const params = new URLSearchParams(window.location.search);
+      const err = params.get('error');
+      if (err) {
+        const div = document.createElement('div');
+        div.className = 'error';
+        div.textContent = err;
+        document.querySelector('.subtitle').after(div);
+      }
+    })();
+
+    // Live founder counter
+    fetch('/api/founder-counter').then(r => r.json()).then(d => {
+      const badge = document.getElementById('founder-badge');
+      const remainEl = document.getElementById('founder-remaining');
+      const totalEl = document.getElementById('founder-total');
+      remainEl.textContent = d.slots_remaining;
+      totalEl.textContent = d.slots_total;
+      if (d.slots_remaining === 0) {
+        badge.classList.add('sold-out');
+        badge.innerHTML = '<strong>Founder spots:</strong> Sold out — standard Pro pricing applies.';
+      }
+    }).catch(() => {});
+  </script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+# Fly.io app config for Locksmith Brain Tool 1.
+# Edit `app` and `primary_region` before first deploy.
+
+app = "locksmith-daddy"
+primary_region = "ord"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  LBT1_DATA_DIR = "/data"
+  LBT1_DB_PATH = "/data/lbt1.db"
+  PLAYWRIGHT_HEADLESS = "true"
+
+# Persistent volume for the SQLite DB + secret key + screenshots
+[mounts]
+  source = "lbt1_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 4
+    hard_limit = 8
+
+# Playwright + Chromium needs ~1 GB RAM minimum to be reliable.
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2gb"

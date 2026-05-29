@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Locksmith Daddy — VIN Key Finder</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #1a2027;
+      --border: #2a3441;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #ff6b35;
+      --green: #3fb950;
+      --yellow: #d29922;
+      --red: #f85149;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--text);
+      margin: 0; padding: 24px; line-height: 1.5;
+    }
+    .container { max-width: 880px; margin: 0 auto; }
+
+    .top-bar {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 24px; padding-bottom: 14px; border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .who { color: var(--muted); }
+    .who strong { color: var(--text); }
+    .usage-pill {
+      display: inline-block;
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 12px; padding: 3px 10px; margin-left: 8px;
+      font-size: 11px; letter-spacing: 0.3px;
+    }
+    .signout-btn {
+      background: none; border: 1px solid var(--border); color: var(--muted);
+      padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;
+    }
+    .signout-btn:hover { color: var(--text); border-color: var(--muted); }
+    .tier-pill {
+      display: inline-block;
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 12px; padding: 3px 10px; margin-left: 8px;
+      font-size: 11px; letter-spacing: 0.3px;
+    }
+    .tier-pill.trial-low { border-color: var(--accent); color: var(--accent); }
+    .tier-pill.pro { border-color: var(--green); color: var(--green); }
+    .tier-pill.expired { border-color: var(--red); color: var(--red); }
+    .upgrade-btn {
+      background: var(--accent); color: #fff; border: 0;
+      padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 600;
+      cursor: pointer; text-decoration: none;
+    }
+    .upgrade-btn:hover { opacity: 0.9; }
+    .trial-expired-banner {
+      background: rgba(248,81,73,0.1); border: 1px solid rgba(248,81,73,0.3);
+      color: var(--red); padding: 14px 18px; border-radius: 8px; margin-bottom: 20px;
+      font-size: 14px; display: none;
+    }
+    .trial-expired-banner.visible { display: block; }
+    .trial-expired-banner a { color: var(--accent); font-weight: 600; }
+
+    header { margin-bottom: 16px; }
+    h1 {
+      font-size: 28px; margin: 0 0 4px 0; font-weight: 600;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .beta-badge {
+      background: var(--accent); color: #fff;
+      font-size: 11px; font-weight: 700; letter-spacing: 1px;
+      padding: 3px 8px; border-radius: 4px;
+    }
+    .subtitle { color: var(--muted); font-size: 14px; }
+    .audience { color: var(--accent); font-size: 12px; margin-top: 4px; }
+    .beta-banner {
+      background: rgba(255, 107, 53, 0.08);
+      border: 1px solid rgba(255, 107, 53, 0.3);
+      border-radius: 6px; padding: 12px 16px; margin: 16px 0 24px 0;
+      font-size: 13px; color: var(--text); line-height: 1.55;
+    }
+    .beta-banner strong { color: var(--accent); }
+    .no-result-card {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 8px; padding: 18px; margin-top: 12px;
+    }
+    .no-result-card h3 {
+      font-size: 15px; margin: 0 0 8px 0; color: var(--yellow);
+    }
+    .no-result-card p { margin: 8px 0; color: var(--muted); font-size: 13px; }
+    .no-result-card .report-btn-big {
+      background: var(--accent); color: #fff; border: none;
+      padding: 8px 16px; border-radius: 6px; font-weight: 600;
+      cursor: pointer; font-size: 13px; margin-top: 8px;
+    }
+
+    .lookup-form {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+      padding: 20px; margin-bottom: 24px; display: flex; gap: 12px; align-items: stretch;
+    }
+    .vin-input {
+      flex: 1; background: var(--bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: 6px;
+      padding: 12px 14px; font-size: 16px;
+      font-family: "SF Mono", Consolas, monospace; letter-spacing: 1px; text-transform: uppercase;
+    }
+    .vin-input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    .submit-btn {
+      background: var(--accent); color: #fff; border: none; border-radius: 6px;
+      padding: 0 24px; font-size: 15px; font-weight: 600; cursor: pointer; min-width: 120px;
+    }
+    .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .status { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+      padding: 16px 20px; margin-bottom: 16px; display: none; }
+    .status.visible { display: block; }
+    .status-bar { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; }
+    .spinner { width: 18px; height: 18px; border: 2px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%;
+      animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .elapsed { color: var(--muted); font-size: 14px; }
+    .note { color: var(--muted); font-size: 13px; }
+
+    .result { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+      padding: 20px; margin-bottom: 16px; display: none; }
+    .result.visible { display: block; }
+    .result h2 { font-size: 18px; margin: 0 0 12px 0; display: flex; align-items: center; gap: 10px; }
+
+    .verified-badge { display: inline-block; padding: 3px 10px; border-radius: 12px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }
+    .verified-badge.green { background: rgba(63, 185, 80, 0.15); color: var(--green); }
+    .verified-badge.yellow { background: rgba(210, 153, 34, 0.15); color: var(--yellow); }
+    .confidence { font-size: 12px; color: var(--muted); margin-left: auto; }
+
+    .profile { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px;
+      font-size: 14px; margin-bottom: 16px; padding: 12px;
+      background: var(--bg); border-radius: 6px; }
+    .profile dt { color: var(--muted); }
+    .profile dd { margin: 0; font-family: "SF Mono", Consolas, monospace; }
+
+    .pn-list { list-style: none; padding: 0; margin: 0; }
+    .pn-card { background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+      padding: 14px; margin-bottom: 10px; }
+    .pn-card.primary { border-color: var(--accent); }
+    .pn-row { display: flex; gap: 14px; align-items: baseline; margin-bottom: 6px; flex-wrap: wrap; }
+    .pn { font-family: "SF Mono", Consolas, monospace; font-size: 18px; font-weight: 700; letter-spacing: 0.5px; }
+    .pn-name { color: var(--muted); font-size: 14px; }
+    .pn-tag { background: var(--border); color: var(--text); padding: 2px 8px;
+      border-radius: 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .pn-tag.primary-tag { background: var(--accent); color: #fff; }
+    .pn-meta { font-size: 12px; color: var(--muted); display: flex; gap: 14px;
+      margin-top: 4px; flex-wrap: wrap; align-items: center; }
+    .pn-link { color: var(--accent); text-decoration: none; font-size: 12px; }
+    .pn-link:hover { text-decoration: underline; }
+    .report-btn {
+      background: none; border: 1px solid var(--border); color: var(--muted);
+      padding: 3px 10px; border-radius: 10px; font-size: 11px; cursor: pointer;
+      margin-left: auto;
+    }
+    .report-btn:hover { color: var(--text); border-color: var(--muted); }
+    .report-form {
+      margin-top: 10px; padding: 12px; background: var(--panel);
+      border: 1px solid var(--border); border-radius: 6px;
+      display: none;
+    }
+    .report-form.visible { display: block; }
+    .report-form label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+    .report-form select, .report-form textarea {
+      width: 100%; background: var(--bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: 6px;
+      padding: 8px 10px; font-size: 13px; font-family: inherit; margin-bottom: 8px;
+    }
+    .report-form textarea { resize: vertical; min-height: 60px; }
+    .report-form .actions { display: flex; gap: 8px; }
+    .report-form button {
+      background: var(--accent); color: #fff; border: none; border-radius: 6px;
+      padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .report-form button.cancel { background: var(--border); }
+    .report-thanks { color: var(--green); font-size: 12px; margin-top: 8px; }
+
+    .warning {
+      background: rgba(248, 81, 73, 0.1);
+      border: 1px solid rgba(248, 81, 73, 0.3);
+      color: var(--red);
+      padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; font-size: 13px;
+    }
+
+    .steps { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .steps summary { cursor: pointer; color: var(--muted); font-size: 13px; padding: 4px 0; }
+    .step { font-family: "SF Mono", Consolas, monospace; font-size: 12px; padding: 3px 0; color: var(--muted); }
+    .step.success { color: var(--green); }
+    .step.warning { color: var(--yellow); }
+    .step.error { color: var(--red); }
+    .step-detail { color: var(--muted); margin-left: 14px; font-size: 11px; }
+
+    footer {
+      margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border);
+      color: var(--muted); font-size: 12px; line-height: 1.6;
+    }
+    footer .brand { color: var(--text); font-weight: 600; }
+    footer p { margin: 6px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="top-bar">
+      <div class="who">
+        Signed in as <strong>{{ user_display }}</strong>
+        <span class="usage-pill" id="usage-pill">{{ total_lookups }} lookups · {{ total_seconds }}s total</span>
+        <span class="tier-pill" id="tier-pill">…</span>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <a id="upgrade-link" href="/subscribe" class="upgrade-btn" style="display:none">Upgrade to Pro</a>
+        <form method="post" action="/signout" style="margin: 0;">
+          <button type="submit" class="signout-btn">Sign out</button>
+        </form>
+      </div>
+    </div>
+
+    <header>
+      <h1>VIN Key Finder <span class="beta-badge">BETA</span></h1>
+      <div class="subtitle">Dealer VIN-verified OEM key, transmitter, and smart-key part numbers.</div>
+      <div class="audience">For certified locksmiths only · MVP supports Kia &amp; Hyundai</div>
+    </header>
+
+    <div class="beta-banner">
+      <strong>v0.1 Beta — coverage growing.</strong>
+      A small set of Kia &amp; Hyundai VINs are currently verified end-to-end.
+      If your VIN isn't found, hit <strong>Report</strong> on the result so we
+      can prioritize adding it. We push new verified VINs weekly.
+    </div>
+
+    <div id="trial-expired-banner" class="trial-expired-banner">
+      <strong>You've used all 10 free lookups.</strong>
+      Upgrade to Pro for unlimited dealer-verified PNs.
+      <a href="/subscribe">See pricing →</a>
+    </div>
+
+    <form id="lookup-form" class="lookup-form">
+      <input
+        id="vin-input"
+        class="vin-input"
+        type="text"
+        placeholder="Enter 17-character VIN"
+        maxlength="17"
+        autocomplete="off"
+        spellcheck="false"
+        required
+      >
+      <button id="submit-btn" type="submit" class="submit-btn">Look up</button>
+    </form>
+
+    <div id="status" class="status">
+      <div class="status-bar">
+        <div class="spinner"></div>
+        <span id="status-text">Working…</span>
+        <span id="elapsed" class="elapsed"></span>
+      </div>
+      <div class="note">The scraper opens a fresh browser session for each category, so a full lookup takes about 30–45 seconds.</div>
+    </div>
+
+    <div id="result" class="result"></div>
+
+    <footer>
+      <p>
+        <span class="brand">Locksmith Daddy · Tool 1 · v0.1.0</span>
+        <span style="color: var(--muted); font-size: 11px;"> — operated by Cetabo LLC</span>
+      </p>
+      <p>
+        The Locksmith Daddy is a private research platform for certified
+        automotive locksmiths. <span style="color: var(--text);">Tool 1</span>
+        turns a VIN into a dealer-verified OEM key, transmitter, or smart-key
+        part number — with the dealer's own page linked as evidence.
+        Replacement and button-count variants are surfaced automatically.
+        Currently covers Kia.
+      </p>
+    </footer>
+  </div>
+
+  <script>
+    const form = document.getElementById('lookup-form');
+    const vinInput = document.getElementById('vin-input');
+    const submitBtn = document.getElementById('submit-btn');
+    const statusEl = document.getElementById('status');
+    const statusText = document.getElementById('status-text');
+    const elapsedEl = document.getElementById('elapsed');
+    const resultEl = document.getElementById('result');
+    const usagePill = document.getElementById('usage-pill');
+
+    let elapsedTimer = null;
+    let currentVin = '';
+
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const vin = vinInput.value.trim().toUpperCase();
+      if (!vin) return;
+      currentVin = vin;
+
+      submitBtn.disabled = true;
+      resultEl.classList.remove('visible');
+      resultEl.innerHTML = '';
+      statusEl.classList.add('visible');
+      statusText.textContent = `Looking up ${vin}…`;
+
+      const startMs = Date.now();
+      elapsedTimer = setInterval(() => {
+        const s = Math.floor((Date.now() - startMs) / 1000);
+        elapsedEl.textContent = `${s}s elapsed`;
+      }, 250);
+
+      try {
+        const res = await fetch('/api/lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vin }),
+        });
+        if (res.status === 401) {
+          window.location.href = '/signin';
+          return;
+        }
+        if (res.status === 402) {
+          // Trial expired — bounce to subscribe page
+          const data = await res.json();
+          renderError(data.detail || 'Free beta used up. Upgrade to keep going.');
+          setTimeout(() => { window.location.href = '/subscribe'; }, 1500);
+          return;
+        }
+        if (res.status === 403) {
+          // Could be banned or email-unverified
+          const data = await res.json();
+          renderError(data.detail || 'Access denied.');
+          return;
+        }
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`HTTP ${res.status}: ${text}`);
+        }
+        const data = await res.json();
+        renderResult(data);
+        refreshUsage();
+      } catch (err) {
+        renderError(err.message);
+      } finally {
+        clearInterval(elapsedTimer);
+        statusEl.classList.remove('visible');
+        submitBtn.disabled = false;
+      }
+    });
+
+    async function refreshUsage() {
+      try {
+        const r = await fetch('/api/me');
+        if (!r.ok) return;
+        const u = await r.json();
+        usagePill.textContent = `${u.total_lookups} lookups · ${u.total_lookup_seconds}s total`;
+      } catch (_) {}
+      await refreshTrial();
+    }
+
+    async function refreshTrial() {
+      try {
+        const r = await fetch('/api/me/trial-status');
+        if (!r.ok) return;
+        const t = await r.json();
+        const pill = document.getElementById('tier-pill');
+        const upgrade = document.getElementById('upgrade-link');
+        const banner = document.getElementById('trial-expired-banner');
+        pill.classList.remove('trial-low', 'pro', 'expired');
+        if (!t.is_trial && t.tier === 'pro') {
+          pill.textContent = 'Pro';
+          pill.classList.add('pro');
+          upgrade.style.display = 'none';
+          banner.classList.remove('visible');
+        } else if (t.expired) {
+          pill.textContent = 'Trial expired';
+          pill.classList.add('expired');
+          upgrade.style.display = 'inline-block';
+          banner.classList.add('visible');
+        } else if (t.is_trial) {
+          const left = t.lookups_remaining;
+          pill.textContent = `Beta · ${left} lookup${left === 1 ? '' : 's'} left`;
+          if (left <= 3) pill.classList.add('trial-low');
+          upgrade.style.display = left <= 5 ? 'inline-block' : 'none';
+          banner.classList.remove('visible');
+        }
+      } catch (_) {}
+    }
+    // Trigger trial check on load.
+    refreshTrial();
+
+    function renderResult(data) {
+      const verified = data.dealer_verification_status === 'DEALER_VERIFIED_BY_VIN';
+      const profile = data.vehicle_profile || {};
+      const profileBits = [profile.year, profile.make, profile.model, profile.trim]
+        .filter(Boolean).join(' ');
+
+      let html = `
+        <h2>
+          <span>${profileBits || data.vin}</span>
+          <span class="verified-badge ${verified ? 'green' : 'yellow'}">
+            ${verified ? 'Dealer Verified' : 'Not Dealer Verified'}
+          </span>
+          <span class="confidence">${data.confidence_label} · ${data.confidence_score.toFixed(2)}</span>
+        </h2>
+      `;
+
+      if (data.warnings && data.warnings.length) {
+        for (const w of data.warnings) {
+          html += `<div class="warning">${escapeHtml(w)}</div>`;
+        }
+      }
+
+      html += `<dl class="profile">`;
+      const profileFields = [
+        ['VIN', data.vin],
+        ['Year', profile.year],
+        ['Make', profile.make],
+        ['Model', profile.model],
+        ['Trim', profile.trim],
+        ['Engine', profile.engine_model],
+        ['Displacement', profile.displacement_l ? `${profile.displacement_l} L` : null],
+        ['Drive', profile.drive_type],
+        ['Doors', profile.doors],
+      ];
+      for (const [k, v] of profileFields) {
+        if (v != null) html += `<dt>${k}</dt><dd>${escapeHtml(String(v))}</dd>`;
+      }
+      html += `</dl>`;
+
+      const parts = [];
+      if (data.primary_result) parts.push({ ...data.primary_result, _primary: true });
+      for (const a of (data.alternative_matches || [])) parts.push(a);
+
+      if (parts.length === 0) {
+        // Show a clear "not in catalog" card with one-click Report.
+        html += `
+          <div class="no-result-card">
+            <h3>VIN not in current verified catalog</h3>
+            <p>This VIN isn't one of our pre-verified entries yet. During the v0.1 Beta we serve only VINs we've dealer-verified offline.</p>
+            <p>Click below to flag this VIN — we prioritize Reports when adding new coverage.</p>
+            <button type="button" class="report-btn-big" onclick="reportMissingVin('${escapeAttr(data.vin)}')">Request priority for this VIN</button>
+            <div class="report-thanks" id="report-thanks-missing" style="display:none;">Thanks — we'll prioritize this VIN in the next batch.</div>
+          </div>
+        `;
+      } else {
+        html += `<ul class="pn-list">`;
+        for (const [i, p] of parts.entries()) {
+          html += `
+            <li class="pn-card ${p._primary ? 'primary' : ''}">
+              <div class="pn-row">
+                <span class="pn">${escapeHtml(p.oem_part_number)}</span>
+                <span class="pn-name">${escapeHtml(p.part_name || '')}</span>
+                ${p._primary ? '<span class="pn-tag primary-tag">Primary</span>' : '<span class="pn-tag">Alt</span>'}
+                <button type="button" class="report-btn" data-pn="${escapeAttr(p.oem_part_number)}" data-idx="${i}">Report</button>
+              </div>
+              <div class="pn-meta">
+                ${p.category_path ? `<span>${escapeHtml(p.category_path)}</span>` : ''}
+                ${p.source_url ? `<a class="pn-link" href="${escapeAttr(p.source_url)}" target="_blank" rel="noopener">View at dealer →</a>` : ''}
+              </div>
+              ${p.fitment_evidence ? `<div class="pn-meta"><span>${escapeHtml(p.fitment_evidence)}</span></div>` : ''}
+              <div class="report-form" id="report-form-${i}">
+                <label>What's wrong with ${escapeHtml(p.oem_part_number)}?</label>
+                <select id="report-issue-${i}">
+                  <option value="wrong_part">Wrong part for this vehicle</option>
+                  <option value="missing_variant">Missing variant (button count, prox, etc.)</option>
+                  <option value="superseded">Part is superseded — newer PN exists</option>
+                  <option value="incorrect_label">Wrong part name or category</option>
+                  <option value="other">Something else</option>
+                </select>
+                <label>Notes (what you know vs what was returned)</label>
+                <textarea id="report-notes-${i}" placeholder="The correct PN is ... I tried this on a ... and ..."></textarea>
+                <div class="actions">
+                  <button type="button" onclick="submitReport(${i}, '${escapeAttr(p.oem_part_number)}')">Submit report</button>
+                  <button type="button" class="cancel" onclick="toggleReport(${i})">Cancel</button>
+                </div>
+                <div class="report-thanks" id="report-thanks-${i}" style="display:none;">Thanks — report logged.</div>
+              </div>
+            </li>
+          `;
+        }
+        html += `</ul>`;
+      }
+
+      // Research steps intentionally NOT rendered to end users —
+      // methodology protection. Server strips them for non-admin sessions
+      // (see api.py /api/lookup). Admins see the full trace via /admin.
+
+      resultEl.innerHTML = html;
+      resultEl.classList.add('visible');
+
+      // Wire up Report toggles.
+      document.querySelectorAll('.report-btn').forEach(btn => {
+        btn.addEventListener('click', () => toggleReport(btn.dataset.idx));
+      });
+    }
+
+    function toggleReport(idx) {
+      const f = document.getElementById('report-form-' + idx);
+      if (f) f.classList.toggle('visible');
+    }
+
+    async function submitReport(idx, pn) {
+      const issueEl = document.getElementById('report-issue-' + idx);
+      const notesEl = document.getElementById('report-notes-' + idx);
+      const thanks = document.getElementById('report-thanks-' + idx);
+      try {
+        const res = await fetch('/api/report', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            vin: currentVin,
+            part_number: pn,
+            issue: issueEl.value,
+            notes: notesEl.value,
+          }),
+        });
+        if (res.status === 401) { window.location.href = '/signin'; return; }
+        if (res.ok) {
+          thanks.style.display = 'block';
+          notesEl.disabled = true;
+          issueEl.disabled = true;
+        } else {
+          thanks.textContent = `Report failed (HTTP ${res.status})`;
+          thanks.style.color = 'var(--red)';
+          thanks.style.display = 'block';
+        }
+      } catch (e) {
+        thanks.textContent = `Report failed: ${e.message}`;
+        thanks.style.color = 'var(--red)';
+        thanks.style.display = 'block';
+      }
+    }
+    async function reportMissingVin(vin) {
+      const thanks = document.getElementById('report-thanks-missing');
+      try {
+        const res = await fetch('/api/report', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            vin: vin,
+            part_number: 'N/A',
+            issue: 'vin_not_in_catalog',
+            notes: 'Locksmith requests this VIN be added to verified catalog.',
+          }),
+        });
+        if (res.ok) {
+          thanks.style.display = 'block';
+        } else if (res.status === 401) {
+          window.location.href = '/signin';
+        } else {
+          thanks.textContent = `Report failed (HTTP ${res.status})`;
+          thanks.style.color = 'var(--red)';
+          thanks.style.display = 'block';
+        }
+      } catch (e) {
+        thanks.textContent = `Report failed: ${e.message}`;
+        thanks.style.color = 'var(--red)';
+        thanks.style.display = 'block';
+      }
+    }
+
+    // Expose for inline onclick handlers.
+    window.toggleReport = toggleReport;
+    window.submitReport = submitReport;
+    window.reportMissingVin = reportMissingVin;
+
+    function renderError(msg) {
+      resultEl.innerHTML = `<div class="warning">Request failed: ${escapeHtml(msg)}</div>`;
+      resultEl.classList.add('visible');
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    function escapeAttr(s) {
+      return escapeHtml(s);
+    }
+  </script>
+</body>
+</html>

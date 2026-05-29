@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Add payment card · Locksmith Daddy</title>
+  <script src="https://js.stripe.com/v3/"></script>
+  <style>
+    :root { --bg: #0f1419; --panel: #1a2027; --border: #2a3441; --text: #e6edf3; --muted: #8b949e; --accent: #ff6b35; --red: #f85149; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 24px; line-height: 1.5; }
+    .wrap { max-width: 480px; margin: 60px auto; }
+    h1 { font-size: 24px; margin: 0 0 6px 0; }
+    .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 24px; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 24px; }
+    #payment-element { padding: 12px; background: var(--bg); border-radius: 6px; }
+    button.primary { width: 100%; margin-top: 18px; background: var(--accent); color: #fff; border: none; padding: 11px; border-radius: 6px; font-weight: 600; cursor: pointer; }
+    button.primary:disabled { opacity: 0.6; cursor: wait; }
+    .skip { text-align: center; margin-top: 18px; font-size: 13px; }
+    .skip a { color: var(--muted); }
+    .error { color: var(--red); font-size: 13px; margin-top: 10px; min-height: 18px; }
+    .why {
+      margin-top: 14px; padding: 10px 12px;
+      background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+      font-size: 12px; color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Save a payment card</h1>
+    <div class="subtitle">Optional — but it makes conversion to Pro one-click when your trial ends.</div>
+    <div class="card">
+      <div class="why">
+        <strong>You're not being charged today.</strong>
+        We're just saving the card so when your free trial ends you can keep
+        looking up VINs without re-entering payment info. Cancel anytime
+        before the trial ends — no charge.
+      </div>
+      <form id="payment-form" style="margin-top: 16px;">
+        <div id="payment-element"></div>
+        <div class="error" id="payment-error"></div>
+        <button type="submit" id="submit-btn" class="primary">Save card</button>
+      </form>
+      <div class="skip"><a href="/">Skip for now</a></div>
+    </div>
+  </div>
+  <script>
+    const PUBLISHABLE_KEY = "{{ publishable_key }}";
+    const CLIENT_SECRET = "{{ client_secret }}";
+    const stripe = Stripe(PUBLISHABLE_KEY);
+    const elements = stripe.elements({ clientSecret: CLIENT_SECRET, appearance: { theme: 'night' } });
+    const paymentElement = elements.create('payment');
+    paymentElement.mount('#payment-element');
+
+    const form = document.getElementById('payment-form');
+    const submitBtn = document.getElementById('submit-btn');
+    const errorEl = document.getElementById('payment-error');
+
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Saving...';
+      errorEl.textContent = '';
+      const { error, setupIntent } = await stripe.confirmSetup({
+        elements,
+        confirmParams: { return_url: window.location.origin + '/add-card' },
+        redirect: 'if_required',
+      });
+      if (error) {
+        errorEl.textContent = error.message;
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Save card';
+        return;
+      }
+      // Setup succeeded — send the payment_method_id to our server to persist.
+      const res = await fetch('/add-card/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'payment_method_id=' + encodeURIComponent(setupIntent.payment_method),
+      });
+      if (res.redirected) {
+        window.location.href = res.url;
+      } else {
+        window.location.href = '/';
+      }
+    });
+  </script>
+</body>
+</html>

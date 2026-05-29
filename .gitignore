@@ -1,0 +1,70 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+
+# Playwright
+playwright-report/
+test-results/
+.playwright/
+
+# Env (NEVER COMMIT — contains API keys for ScrapingAnt, BrightData, etc.)
+.env
+.env.local
+.env.*.local
+
+# Run artifacts (may contain VIN lookups, screenshots, etc.)
+data/v1_run/
+data/lookups/
+data/runs/
+data/cache/
+data/.secret_key
+data/.scrapingant_key
+data/.brightdata_key
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (for frontend when added)
+node_modules/
+.next/
+out/
+
+# Project-local runtime data
+data/cache/
+data/runs/
+data/diagnostics/
+data/disambiguation.log
+data/unresolved.log
+data/2024_2025_vins.csv
+data/2024_2025_report*.csv
+data/failed_vins_*.csv
+data/cargurus_validation_report*.csv
+*.log
+
+# Curl cookie jars
+cookies.txt

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verify phone · Locksmith Daddy</title>
+  <style>
+    :root { --bg: #0f1419; --panel: #1a2027; --border: #2a3441; --text: #e6edf3; --muted: #8b949e; --accent: #ff6b35; --green: #3fb950; --red: #f85149; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 24px; line-height: 1.5; }
+    .wrap { max-width: 420px; margin: 60px auto; }
+    h1 { font-size: 24px; margin: 0 0 6px 0; }
+    .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 24px; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 24px; }
+    label { display: block; color: var(--muted); font-size: 13px; margin-bottom: 4px; }
+    input[type=text] { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; font-size: 22px; font-family: "SF Mono", Consolas, monospace; text-align: center; letter-spacing: 8px; }
+    button.primary { width: 100%; margin-top: 14px; background: var(--accent); color: #fff; border: none; padding: 11px; border-radius: 6px; font-weight: 600; cursor: pointer; }
+    button.secondary { width: 100%; margin-top: 8px; background: none; color: var(--muted); border: 1px solid var(--border); padding: 9px; border-radius: 6px; cursor: pointer; }
+    .phone { font-family: "SF Mono", Consolas, monospace; color: var(--accent); }
+    .skip { margin-top: 18px; text-align: center; font-size: 13px; }
+    .skip a { color: var(--muted); }
+    .msg { padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; font-size: 13px; }
+    .msg.error { background: rgba(248,81,73,0.1); border: 1px solid rgba(248,81,73,0.3); color: var(--red); }
+    .msg.success { background: rgba(63,185,80,0.1); border: 1px solid rgba(63,185,80,0.3); color: var(--green); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Verify your phone</h1>
+    <div class="subtitle">Sending a 6-digit code to <span class="phone">{{ phone }}</span></div>
+    <div class="card">
+      <form method="post" action="/verify-phone/send" style="margin-bottom: 12px;">
+        <button type="submit" class="primary">Send code</button>
+      </form>
+      <form method="post" action="/verify-phone">
+        <label for="code">Enter 6-digit code</label>
+        <input id="code" name="code" type="text" maxlength="6" autocomplete="one-time-code" inputmode="numeric" required>
+        <button type="submit" class="primary">Verify</button>
+      </form>
+      <div class="skip"><a href="/">Skip for now</a> (you can verify later)</div>
+    </div>
+  </div>
+  <script>
+    (function() {
+      const params = new URLSearchParams(window.location.search);
+      const e = params.get('error'), m = params.get('message');
+      if (e || m) {
+        const div = document.createElement('div');
+        div.className = 'msg ' + (e ? 'error' : 'success');
+        div.textContent = e || m;
+        document.querySelector('.subtitle').after(div);
+      }
+    })();
+  </script>
+</body>
+</html>
