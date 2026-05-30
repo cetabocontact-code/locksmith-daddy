@@ -48,11 +48,14 @@ def _dispatch_from_clock() -> str:
 
 
 async def session_morning() -> None:
-    """AM: pick the queued investigation and run it with diagnostic capture."""
+    """AM: pick top item from QUEUE.md and dispatch to the matching
+    investigation script. Each known investigation maps to a script in
+    scripts/autopilot_*.py. Output goes to docs/daily/{date}_morning.md."""
     from lbt1 import diagnostics  # noqa: F401
-    # Read pending investigations from docs/daily/QUEUE.md (next priority item).
+    from lbt1.budget import allow_burn
+
     queue_path = Path(__file__).resolve().parents[1] / "docs" / "daily" / "QUEUE.md"
-    next_task = "Bug #2 (placeholder page retry)"
+    next_task = ""
     if queue_path.exists():
         for line in queue_path.read_text(encoding="utf-8").splitlines():
             s = line.strip()
@@ -60,10 +63,62 @@ async def session_morning() -> None:
                 next_task = s[5:].strip()
                 break
     print(f"[autopilot:morning] next queued: {next_task}")
-    # Each named investigation is its own script under scripts/autopilot_*.py
-    # For now we just print — the actual code per investigation is per-session.
-    # When the next-task name matches a known autopilot script, dispatch.
-    print("[autopilot:morning] (run the appropriate scripts/autopilot_*.py manually until full automation lands)")
+    if not allow_burn(estimated_credits=1500):
+        print("[autopilot:morning] daily budget too low — skipping investigation")
+        return
+
+    # Map queue text -> investigation script. The matcher is keyword-based
+    # so we can add new investigations without touching this dispatcher.
+    lower = next_task.lower()
+    investigations = [
+        ("toyota category", "autopilot_toyota_categories.py"),
+        ("toyota driver",   "autopilot_toyota_categories.py"),
+        ("genesis simplepart", "autopilot_genesis_simplepart.py"),
+        ("genesis g70",     "autopilot_genesis_simplepart.py"),
+        ("ev6",             "autopilot_kia_ev6_trim.py"),
+        ("palisade",        "autopilot_palisade_2025.py"),
+        ("bug #2",          "autopilot_bug2_placeholder.py"),
+        ("placeholder",     "autopilot_bug2_placeholder.py"),
+        ("sonata",          "autopilot_sonata_deepdive.py"),
+    ]
+    chosen_script: str | None = None
+    for kw, script in investigations:
+        if kw in lower:
+            p = Path(__file__).resolve().parent / script
+            if p.exists():
+                chosen_script = str(p)
+                break
+    today = _today_cst().strftime("%Y-%m-%d")
+    report = Path(__file__).resolve().parents[1] / "docs" / "daily" / f"{today}_morning.md"
+    report.parent.mkdir(parents=True, exist_ok=True)
+
+    if not chosen_script:
+        report.write_text(
+            f"# Morning Report — {today}\n\n"
+            f"**Queue top**: {next_task}\n\n"
+            "No matching investigation script found. Add a script "
+            "`scripts/autopilot_<name>.py` and register a keyword in "
+            "`scripts/autopilot.py:investigations` to enable auto-dispatch.\n",
+            encoding="utf-8")
+        print(f"[autopilot:morning] no matching investigation — wrote {report}")
+        return
+
+    # Execute the investigation as a subprocess so its stdout becomes the
+    # daily report's body. Capture+save.
+    import subprocess
+    print(f"[autopilot:morning] running {chosen_script}")
+    proc = subprocess.run(
+        [sys.executable, "-u", chosen_script],
+        capture_output=True, text=True, timeout=2400,
+        env={**os.environ, "LBT1_DIAGNOSTICS": "1"},
+    )
+    body = f"# Morning Report — {today}\n\n**Investigation**: {next_task}\n\n"
+    body += f"**Script**: `{Path(chosen_script).name}`  exit={proc.returncode}\n\n"
+    body += "## Output\n\n```\n" + (proc.stdout or "") + "\n```\n"
+    if proc.stderr:
+        body += "\n## Stderr\n\n```\n" + proc.stderr + "\n```\n"
+    report.write_text(body, encoding="utf-8")
+    print(f"[autopilot:morning] wrote {report} ({len(body)} chars)")
 
 
 def session_afternoon() -> None:

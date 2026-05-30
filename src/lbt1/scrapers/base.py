@@ -309,7 +309,8 @@ class OempartsonlineDriver:
             f"{profile.displacement_l:g}l".replace(".", "-")
             if profile.displacement_l else ""
         )
-        fuel_first = (profile.fuel_type or "").lower().split()[0][:3]  # 'gas'/'die'/'ele'
+        _fuel_tokens = (profile.fuel_type or "").lower().split()
+        fuel_first = _fuel_tokens[0][:3] if _fuel_tokens else ""  # 'gas'/'die'/'ele' or empty
         drive_short = ""  # "fwd", "awd", "4wd"
         if profile.drive_type:
             dt = profile.drive_type.lower()
