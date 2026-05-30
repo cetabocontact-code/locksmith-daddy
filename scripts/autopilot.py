@@ -71,15 +71,17 @@ async def session_morning() -> None:
     # so we can add new investigations without touching this dispatcher.
     lower = next_task.lower()
     investigations = [
-        ("toyota category", "autopilot_toyota_categories.py"),
-        ("toyota driver",   "autopilot_toyota_categories.py"),
-        ("genesis simplepart", "autopilot_genesis_simplepart.py"),
-        ("genesis g70",     "autopilot_genesis_simplepart.py"),
-        ("ev6",             "autopilot_kia_ev6_trim.py"),
-        ("palisade",        "autopilot_palisade_2025.py"),
-        ("bug #2",          "autopilot_bug2_placeholder.py"),
-        ("placeholder",     "autopilot_bug2_placeholder.py"),
-        ("sonata",          "autopilot_sonata_deepdive.py"),
+        ("toyotapartsdeal",     "autopilot_toyotapartsdeal_ajax.py"),
+        ("reverse-engineer",    "autopilot_toyotapartsdeal_ajax.py"),
+        ("toyota category",     "autopilot_toyota_categories.py"),
+        ("toyota driver",       "autopilot_toyota_categories.py"),
+        ("genesis simplepart",  "autopilot_genesis_simplepart.py"),
+        ("genesis g70",         "autopilot_genesis_simplepart.py"),
+        ("ev6",                 "autopilot_kia_ev6_trim.py"),
+        ("palisade",            "autopilot_palisade_2025.py"),
+        ("bug #2",              "autopilot_bug2_placeholder.py"),
+        ("placeholder",         "autopilot_bug2_placeholder.py"),
+        ("sonata",              "autopilot_sonata_deepdive.py"),
     ]
     chosen_script: str | None = None
     for kw, script in investigations:
