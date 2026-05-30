@@ -68,12 +68,27 @@ def _save_cache(cache: dict) -> None:
 
 StepCallback = Callable[[ResearchStep], Awaitable[None] | None]
 
-# Make -> (dealer_host, PN prefixes that are key fobs for this make)
-_MAKE_CONFIG: dict[str, tuple[str, tuple[str, ...]]] = {
-    "hyundai": ("hyundai.oempartsonline.com",  ("95440", "95430", "95441")),
-    "kia":     ("kia.oempartsonline.com",      ("95440", "95430", "95431")),
-    "genesis": ("genesis.oempartsonline.com",  ("95440", "95430")),
-    "toyota":  ("toyota.oempartsonline.com",   ("89070", "89904", "89742")),
+# Make -> list of (dealer_host, PN prefixes) — tries each dealer in order
+# until one returns candidates. Per-make insight (2026-05-29):
+#   - Genesis catalog is small on its own RP dealer; Genesis fobs are
+#     historically 95440-* (Hyundai family) and Hyundai dealer pages
+#     often index Genesis vehicles → try Hyundai dealer as backup.
+#   - Lexus → Toyota dealer for same reason (luxury subsidiary).
+#   - Kia rarely shares with Hyundai despite ownership, keep separate.
+_MAKE_CONFIG: dict[str, list[tuple[str, tuple[str, ...]]]] = {
+    "hyundai": [("hyundai.oempartsonline.com",  ("95440", "95430", "95441"))],
+    "kia":     [("kia.oempartsonline.com",      ("95440", "95430", "95431"))],
+    "genesis": [
+        ("genesis.oempartsonline.com", ("95440", "95430")),
+        ("hyundai.oempartsonline.com", ("95440", "95430")),  # adjacent-dealer fallback
+    ],
+    "toyota":  [
+        ("toyota.oempartsonline.com", ("89070", "89904", "89742")),
+    ],
+    "lexus":   [
+        ("lexus.oempartsonline.com", ("89070", "89904", "89742")),
+        ("toyota.oempartsonline.com", ("89070", "89904", "89742")),  # adjacent
+    ],
 }
 
 
@@ -112,13 +127,12 @@ class DuckDuckGoSearchFallbackDriver:
 
     async def lookup_vin(self, vin: str, profile: VehicleProfile) -> list[OemPart]:
         make = (profile.make or "").lower().strip()
-        config = _MAKE_CONFIG.get(make)
-        if not config:
+        dealer_configs = _MAKE_CONFIG.get(make)
+        if not dealer_configs:
             await self._emit(
                 f"DDG fallback: no config for make {profile.make!r}", "info",
             )
             return []
-        dealer_host, pn_prefixes = config
         year = str(profile.year) if profile.year else ""
         model = (profile.model or "").split(",")[0].strip()
         if not year or not model:
@@ -129,16 +143,20 @@ class DuckDuckGoSearchFallbackDriver:
             f"DDG search-based fallback for {profile.display}", "info", vin,
         )
 
-        candidates: list[tuple[str, str]] = []  # (url, snippet)
-        for pn_prefix in pn_prefixes:
-            query = f'site:{dealer_host} "{pn_prefix}" {year} {model}'
+        # Try each dealer host in order (primary then adjacent fallbacks).
+        # Per-make config orders dealers by likelihood of hit.
+        candidates: list[tuple[str, str, str]] = []  # (url, snippet, host)
+        for dealer_host, pn_prefixes in dealer_configs:
             await self._emit(
-                f"DDG query: {query}", "info",
+                f"DDG querying dealer: {dealer_host}", "info"
             )
-            results = await self._ddg_search(query, dealer_host)
-            candidates.extend(results)
-            if candidates:  # short-circuit on first prefix with hits
-                break
+            local_candidates = await self._search_one_dealer(
+                dealer_host, pn_prefixes, year, model,
+            )
+            for u, s in local_candidates:
+                candidates.append((u, s, dealer_host))
+            if candidates:
+                break  # this dealer had hits; don't waste queries on adjacent
 
         if not candidates:
             await self._emit("DDG fallback: no candidate URLs found", "info")
@@ -149,7 +167,7 @@ class DuckDuckGoSearchFallbackDriver:
         # Step 3: fetch each candidate and confirm fitment
         found: list[OemPart] = []
         seen_pns: set[str] = set()
-        for url, snippet in candidates[:5]:  # cap to control cost
+        for url, snippet, dealer_host in candidates[:5]:
             part = await self._verify_candidate(url, profile, dealer_host)
             if part and part.oem_part_number not in seen_pns:
                 seen_pns.add(part.oem_part_number)
@@ -160,6 +178,26 @@ class DuckDuckGoSearchFallbackDriver:
             "success" if found else "info",
         )
         return found
+
+    async def _search_one_dealer(
+        self, dealer_host: str, pn_prefixes: tuple[str, ...],
+        year: str, model: str,
+    ) -> list[tuple[str, str]]:
+        """For a single dealer host, try each PN prefix with narrow then
+        broad query. Returns the first non-empty result list (caps cost)."""
+        for pn_prefix in pn_prefixes:
+            for query_label, query in [
+                ("narrow", f'site:{dealer_host} "{pn_prefix}" {year} {model}'),
+                ("broad",  f'site:{dealer_host} "{pn_prefix}" {model}'),
+            ]:
+                await self._emit(f"DDG {query_label}: {query}", "info")
+                results = await self._ddg_search(query, dealer_host)
+                if results:
+                    await self._emit(
+                        f"DDG {query_label}: {len(results)} candidate(s)", "info"
+                    )
+                    return results
+        return []
 
     async def _ddg_search(self, query: str, dealer_host: str) -> list[tuple[str, str]]:
         """Hit DuckDuckGo HTML endpoint and parse out result URLs scoped
