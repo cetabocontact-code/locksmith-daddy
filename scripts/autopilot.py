@@ -181,7 +181,7 @@ async def session_evening() -> None:
     rows = list(csv.DictReader(vin_path.open(encoding="utf-8")))
     print(f"[autopilot:evening] running {len(rows)} VINs through pipeline")
 
-    sem = asyncio.Semaphore(3)  # safe concurrency for Discovery plan
+    sem = asyncio.Semaphore(2)  # safe concurrency for Discovery plan + retry headroom
     async def one(vin: str) -> dict:
         async with sem:
             try:

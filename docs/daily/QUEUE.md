@@ -5,14 +5,13 @@ the autopilot strikes it off and moves to the next.
 
 ## Active queue
 
-- [ ] Toyota category tuning — probe Camry vehicle landing page to find where fobs (89904-*/89070-*) actually live. Likely body/locks-hardware or accessories
-- [ ] Apply year-segment fix to KiaOempartsDriver (defensive — same base class so already inherited, but verify with 1 VIN)
-- [ ] Add parts.genesis.com SimplePart driver (closes Genesis G70 0% gap)
+- [ ] Toyota — reverse-engineer toyotapartsdeal.com AJAX VIN endpoint (per AKS+NCK guides this is THE Toyota fob source). Same approach that worked for SimplePart's /wm.aspx/CreateVinLinks
 - [ ] Bug #4 — Kia EV6 NHTSA returns "Light, Wind" multi-trim; dealer uses "GT-Line" or similar. Inspect dealer trim chooser
+- [ ] Add parts.genesis.com SimplePart driver (closes Genesis G70 0% gap)
 - [ ] Investigate Hyundai Palisade 2025 0/4 (likely real catalog gap on new model year)
 - [ ] Wait for user's real-VIN DB (data/real_vins_from_codex.csv) → re-run full coverage measurement
-- [ ] Add parts.toyota.com SimplePart-like driver as Toyota tier-2 fallback
-- [ ] Build VA brief #1: "Toyota OEM key fob naming research" task in Arabic
+- [ ] Build Honda/Acura driver (next-most-similar to H/K — Revolution Parts honda.oempartsonline.com)
+- [ ] Build VA brief #1: outreach to enterprise locksmith chains for B2B integration
 
 ## Done this week
 
