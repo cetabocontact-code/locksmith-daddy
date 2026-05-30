@@ -4,9 +4,21 @@ Each row is one production deploy with its small benefit line. The line
 that appears on the sign-in page comes from the most recent entry's
 `benefit` field.
 
-## 2026-05-30 (today)
+## 2026-05-30 (later same day) — Hyundai 2019-2026 expansion
 
-**Benefit (shown on sign-in page):** Toyota support shipped + search-fallback driver added. Sonata/Palisade 2025 + Hyundai/Kia mainstream lineups now verified at 100%.
+**Benefit (shown on sign-in page):** Hyundai coverage extended back to 2019 — 87 / 87 dealer-verified across Accent → Palisade, Ioniq EV/HEV, Kona N, Nexo, Santa Cruz, Veloster N.
+
+What changed under the hood:
+
+- **Expanded Hyundai test set** from 30 → 87 real production VINs spanning eight model years (2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026).
+- Every VIN routed through the live `HyundaiOempartsDriver → HyundaiOemPartDriver → HyundaiCanadaDriver → DuckDuckGoSearchFallbackDriver` chain returned a dealer-confirmed PN. No DDG fallback was needed — all 57 new VINs resolved at the primary Revolution Parts driver.
+- Trim diversity hit: Ioniq EV/HEV/PHEV/5/6, Kona SE/Limited/N/Electric, Nexo Blue/Limited (fuel-cell), Santa Cruz, Santa Fe SEL/Limited/XL/Hybrid, Veloster N, Elantra N, Venue.
+- Confirmed the system handles older NHTSA profile shapes (2019-2021 `ListedYear` / fuel-type fields) and EV/HEV/PHEV/FCEV powertrains without code changes.
+- Wilson 95% confidence lower bound on the 87-VIN sample: **95.8%** — i.e. the true Hyundai success rate is 95.8% or better with 95% confidence.
+
+## 2026-05-30 — Toyota driver + DDG fallback
+
+**Earlier same day:** Toyota support shipped + search-fallback driver added. Sonata/Palisade 2025 + Hyundai/Kia mainstream lineups now verified at 100%.
 
 What changed under the hood:
 
