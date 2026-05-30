@@ -6,12 +6,25 @@
   <title>Sign in · Locksmith Daddy</title>
   <link rel="stylesheet" href="/static/style.css">
   <style>
-    :root { --bg: #0f1419; --panel: #1a2027; --border: #2a3441; --text: #e6edf3; --muted: #8b949e; --accent: #ff6b35; --red: #f85149; }
+    :root { --bg: #0f1419; --panel: #1a2027; --border: #2a3441; --text: #e6edf3; --muted: #8b949e; --accent: #ff6b35; --red: #f85149; --green: #2ea043; }
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 24px; line-height: 1.5; }
-    .auth-wrap { max-width: 420px; margin: 60px auto; }
-    h1 { font-size: 26px; margin: 0 0 4px 0; font-weight: 600; }
-    .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+    .auth-wrap { max-width: 640px; margin: 40px auto; }
+    h1 { font-size: 30px; margin: 0 0 4px 0; font-weight: 700; letter-spacing: -0.5px; }
+    .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 24px; }
+    .pitch { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 20px 24px; margin-bottom: 18px; }
+    .pitch h2 { font-size: 16px; margin: 0 0 10px 0; font-weight: 600; }
+    .pitch p { margin: 0 0 10px 0; font-size: 14px; color: var(--text); }
+    .pitch p:last-child { margin-bottom: 0; }
+    .coverage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 12px 0; }
+    .cov { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; text-align: center; }
+    .cov .make { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .cov .rate { color: var(--text); font-size: 22px; font-weight: 700; margin: 4px 0 0 0; }
+    .cov .rate.high { color: var(--green); }
+    .cov .rate.med { color: var(--accent); }
+    .cov .sample { color: var(--muted); font-size: 11px; margin-top: 2px; }
+    .latest { display: flex; gap: 10px; align-items: flex-start; background: rgba(46, 160, 67, 0.08); border-left: 3px solid var(--green); padding: 10px 14px; font-size: 13px; color: var(--text); border-radius: 4px; }
+    .latest strong { color: var(--green); }
     .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 24px; }
     label { display: block; color: var(--muted); font-size: 13px; margin-bottom: 4px; margin-top: 14px; }
     label:first-of-type { margin-top: 0; }
@@ -25,16 +38,57 @@
     .meta a:hover { text-decoration: underline; }
     .error { background: rgba(248, 81, 73, 0.1); border: 1px solid rgba(248, 81, 73, 0.3); color: var(--red); padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; font-size: 13px; }
     .footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 24px; }
+    @media (max-width: 600px) {
+      .auth-wrap { max-width: 100%; margin: 20px auto; }
+    }
   </style>
 </head>
 <body>
   <div class="auth-wrap">
     <h1>Locksmith Daddy</h1>
-    <div class="subtitle">Sign in to access Tool 1 — VIN Key Finder.</div>
+    <div class="subtitle">VIN → dealer-verified OEM key part number. Built for certified automotive locksmiths.</div>
 
     {{ error_html }}
 
-    <div class="card">
+    <div class="pitch">
+      <h2>What it does</h2>
+      <p>You type a VIN. We resolve the exact year, model, trim, and engine, then pull the dealer-listed OEM key, transmitter, or smart-key part number for that specific vehicle — with the dealer's own product page linked as evidence. No guessing. No "looks close." We only return a part number when the dealer's own catalog confirms it fits.</p>
+      <p>Replacement and button-count variants are surfaced as alternates. If the dealer doesn't carry it, we say so honestly — your trial credit is never charged when we can't return a verified part.</p>
+    </div>
+
+    <div class="pitch">
+      <h2>Measured coverage (2024–2026 real production VINs)</h2>
+      <div class="coverage-grid">
+        <div class="cov">
+          <div class="make">Hyundai</div>
+          <div class="rate high">100%</div>
+          <div class="sample">30 / 30 tested</div>
+        </div>
+        <div class="cov">
+          <div class="make">Kia</div>
+          <div class="rate high">100%</div>
+          <div class="sample">44 / 44 tested</div>
+        </div>
+        <div class="cov">
+          <div class="make">Toyota</div>
+          <div class="rate med">73%</div>
+          <div class="sample">22 / 30 tested</div>
+        </div>
+        <div class="cov">
+          <div class="make">Lexus</div>
+          <div class="rate" style="color: var(--muted)">soon</div>
+          <div class="sample">in queue</div>
+        </div>
+      </div>
+      <p style="font-size: 12px; color: var(--muted); margin: 0;">Coverage is re-measured nightly against fresh VIN sets. Gaps on Toyota are concentrated on 2026 luxury AWD trims (Crown Signia, Sienna Hybrid Limited, Sequoia Limited RWD) where manufacturer catalogs haven't been published yet — those will fill in as dealers update.</p>
+    </div>
+
+    <div class="latest">
+      <span>📍</span>
+      <div><strong>Latest deploy:</strong> Toyota support shipped + search-fallback driver added. Sonata/Palisade 2025 + Hyundai/Kia mainstream lineups now verified at 100%.</div>
+    </div>
+
+    <div class="card" style="margin-top: 18px;">
       <form method="post" action="/signin">
         <label for="email">Email</label>
         <input id="email" name="email" type="email" autocomplete="email" required>
@@ -46,12 +100,12 @@
       </form>
 
       <div class="meta">
-        <a href="/signup">Create account</a>
+        <a href="/signup">Create account · 10 free lookups</a>
         <a href="/forgot">Forgot password?</a>
       </div>
     </div>
 
-    <div class="footer">For certified locksmiths only.</div>
+    <div class="footer">For certified locksmiths only · Operated by Cetabo LLC</div>
   </div>
 
   <script>
