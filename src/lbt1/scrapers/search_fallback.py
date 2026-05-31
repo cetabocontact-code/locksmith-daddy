@@ -83,11 +83,17 @@ _MAKE_CONFIG: dict[str, list[tuple[str, tuple[str, ...]]]] = {
         ("hyundai.oempartsonline.com", ("95440", "95430")),  # adjacent-dealer fallback
     ],
     "toyota":  [
-        ("toyota.oempartsonline.com", ("89070", "89904", "89742")),
+        # 2025-2026 luxury/sport trims use the NEW 8990H-* family (e.g.
+        # 8990H-30260 Crown Signia, 8990H-12460 GR Corolla). Older trims
+        # stay on 89070/89904/89742. Query the new family FIRST because
+        # the 8 known 2026 Toyota gaps (Crown Signia, GR Corolla, Sequoia,
+        # Sienna Limited, Grand Highlander, Crown, Corolla Cross) are all
+        # on 8990H per Key4/SFFOBS/transponderisland listings (2026-05-30).
+        ("toyota.oempartsonline.com", ("8990H", "89070", "89904", "89742")),
     ],
     "lexus":   [
-        ("lexus.oempartsonline.com", ("89070", "89904", "89742")),
-        ("toyota.oempartsonline.com", ("89070", "89904", "89742")),  # adjacent
+        ("lexus.oempartsonline.com", ("8990H", "89070", "89904", "89742")),
+        ("toyota.oempartsonline.com", ("8990H", "89070", "89904", "89742")),  # adjacent
     ],
 }
 
@@ -349,8 +355,25 @@ class DuckDuckGoSearchFallbackDriver:
     @staticmethod
     def _extract_pn(url: str, title: str, soup: BeautifulSoup) -> str:
         """Pull OEM PN from URL (last segment after final dash) or from
-        title text. Normalize to canonical format."""
-        # URL pattern: /oem-parts/{slug}-{pn} where pn is alphanumeric
+        title text. Normalize to canonical format.
+
+        Handles three Hyundai/Kia/Genesis/Toyota PN shapes:
+          - 95440-AA501 → URL has '95440aa501'   (5 digits + 5 alphanum)
+          - 89070-06791 → URL has '8907006791'   (5 digits + 5 digits)
+          - 8990H-30260 → URL has '8990h30260'   (4 digits + LETTER + 5 digits)
+        The 8990H pattern is Toyota's 2025+ smart-key family (Crown Signia,
+        GR Corolla, etc.) and would not be caught by the standard 5-digit
+        prefix regex — added 2026-05-30 after diagnosing all 8 Toyota 2026
+        luxury gaps came down to this PN-shape blind spot.
+        """
+        # Try the 4-digit + letter + 5-digit shape FIRST (Toyota 8990H family)
+        m = re.search(
+            r"/oem-parts/[^/]*?(\d{4}[a-z]\d{5})(?:[?#]|$)", url.lower()
+        )
+        if m:
+            raw = m.group(1)
+            return f"{raw[:5]}-{raw[5:]}".upper()
+        # Standard pattern: 5 digits + 4-8 alphanumerics
         m = re.search(
             r"/oem-parts/[^/]*?(\d{5}[a-z0-9]{4,8})(?:[?#]|$)", url.lower()
         )
@@ -360,8 +383,8 @@ class DuckDuckGoSearchFallbackDriver:
             if len(raw) >= 6 and raw[:5].isdigit():
                 return f"{raw[:5]}-{raw[5:]}".upper()
             return raw.upper()
-        # Try title — "95440-L1760" or "95440 L1760" patterns
-        m = re.search(r"\b(\d{5}[-\s]?[A-Z0-9]{4,8})\b", title)
+        # Try title — "95440-L1760", "8990H-30260", "95440 L1760" patterns
+        m = re.search(r"\b(\d{4}[A-Z]\d{5}|\d{5}[-\s]?[A-Z0-9]{4,8})\b", title)
         if m:
             return m.group(1).replace(" ", "-").upper()
         return ""

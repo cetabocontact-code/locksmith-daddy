@@ -91,6 +91,48 @@ _PN_CATALOG: list[tuple[str, str, int, int, str, tuple[str, ...], str]] = [
     ("genesis", "g70", 2023, 2026, r"",
      ("95440-G9820", "95440-G9720"),
      "genesis.oempartsonline.com"),
+
+    # ── 2025-2026 Toyota Crown Signia ─────────────────────────────────────
+    # Key4 + multiple aftermarket suppliers: 8990H-30260, FCC HYQ14FGZ,
+    # 4-button smart proximity (Crown family — Crown Sedan uses same fob).
+    ("toyota", "crown signia", 2025, 2026, r"",
+     ("8990H-30260", "8990H-30270"),
+     "toyota.oempartsonline.com"),
+    ("toyota", "crown", 2025, 2026, r"",  # base Crown (sedan)
+     ("8990H-30260", "8990H-30270"),
+     "toyota.oempartsonline.com"),
+
+    # ── 2026 Toyota GR Corolla ────────────────────────────────────────────
+    # Key4 confirms 8990H-12460, FCC HYQ14FBW, 3-button proximity.
+    ("toyota", "gr corolla", 2023, 2026, r"",
+     ("8990H-12460", "8990H-12470"),
+     "toyota.oempartsonline.com"),
+
+    # ── 2026 Toyota Sequoia / Tundra / Land Cruiser ──────────────────────
+    # Aftermarket Key4 + Amazon listings: 89904-0C0XX / 8990H-0C0XX family
+    # for full-size SUV/trucks. Limited trim adds remote start variant.
+    ("toyota", "sequoia", 2022, 2026, r"",
+     ("8990H-0C050", "89904-0C050", "89904-0C051", "8990H-0C060"),
+     "toyota.oempartsonline.com"),
+
+    # ── 2026 Toyota Sienna (Hybrid Limited / XSE / Platinum) ─────────────
+    # Sienna shares fob family with Highlander Hybrid (8990H-08XXX).
+    ("toyota", "sienna", 2021, 2026, r"limited|platinum|xse|hybrid",
+     ("8990H-08020", "89904-08020", "89904-08021", "8990H-08030"),
+     "toyota.oempartsonline.com"),
+
+    # ── 2026 Toyota Grand Highlander ──────────────────────────────────────
+    # New nameplate (2024+) on 8990H family.
+    ("toyota", "grand highlander", 2024, 2026, r"",
+     ("8990H-0E020", "8990H-0E030", "89904-0E020"),
+     "toyota.oempartsonline.com"),
+
+    # ── 2026 Toyota Corolla Cross (L / LE / XLE / Hybrid) ────────────────
+    # Base L stays on 89070-12XXX flip remote family; smart proximity
+    # variants use 89904-12XXX.
+    ("toyota", "corolla cross", 2022, 2026, r"l\b|le|xle",
+     ("89070-12590", "89070-12600", "89904-12030", "8990H-12500"),
+     "toyota.oempartsonline.com"),
 ]
 
 

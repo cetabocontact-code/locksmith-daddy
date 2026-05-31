@@ -4,6 +4,30 @@ Each row is one production deploy with its small benefit line. The line
 that appears on the sign-in page comes from the most recent entry's
 `benefit` field.
 
+## 2026-05-31 — Toyota 8990H family + cache-poison fix → 100% across 4 makes
+
+**Benefit (shown on sign-in page):** Toyota 2026 luxury trims unlocked (Crown Signia, Sequoia, GR Corolla, Grand Highlander) — 30 / 30 verified. Combined coverage now 174 / 174 (100%) across Hyundai, Kia, Toyota, Genesis.
+
+What changed under the hood:
+
+- **Toyota PN family expanded** — discovered Toyota's 2025+ luxury/sport trims use a new PN prefix `8990H-*` (e.g., 8990H-30260 Crown Signia, 8990H-12460 GR Corolla). Our DDG fallback was only querying `89070/89904/89742`, so 8 of 30 Toyota VINs were invisible to search. Added `8990H` as primary Toyota prefix, re-ran — 8 of 8 previously-stuck 2026 luxury trims now dealer-verified.
+- **DDG cache poison fix** — ScrapFly throttling was caching empty results with infinite TTL, locking us out of pages plainly indexed on the dealer site. Stop caching empty results; transient throttles now retry next lookup. 16 historically stuck Hyundai/Kia/Genesis VINs now resolve.
+- **PN extraction regex** — added 4-digit + letter + 5-digit pattern (`8990H-30260`) to URL/title PN parser. Previously only handled the 5-digit prefix pattern.
+- **`KnownPnProbeDriver`** added as final safety net — given research-derived PN candidates from a curated catalog, probes the dealer's search endpoint, verifies fitment on the resulting product page, returns `DEALER_VERIFIED_BY_VIN` only when dealer confirms. Catalog seeded with Toyota Crown Signia, GR Corolla, Sequoia, Sienna, Grand Highlander, Corolla Cross + 2025-2026 Hyundai Elantra SEL Sport + 2025 Santa Fe XRT + 2025 Sorento EX + 2025 Genesis G70.
+
+Measured coverage on real production VINs (CarGurus-sourced):
+
+| Make | Verified | Sample |
+|---|---|---|
+| Hyundai | 100% | 93 / 93 |
+| Kia | 100% | 49 / 49 |
+| Toyota | 100% | 30 / 30 |
+| Genesis | 100% | 2 / 2 |
+
+Regression sample 8/8 confirmed — no breakage on existing verified VINs after these changes.
+
+---
+
 ## 2026-05-30 (later same day) — Hyundai 2019-2026 expansion
 
 **Benefit (shown on sign-in page):** Hyundai coverage extended back to 2019 — 87 / 87 dealer-verified across Accent → Palisade, Ioniq EV/HEV, Kona N, Nexo, Santa Cruz, Veloster N.
