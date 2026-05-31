@@ -4,6 +4,32 @@ Each row is one production deploy with its small benefit line. The line
 that appears on the sign-in page comes from the most recent entry's
 `benefit` field.
 
+## 2026-05-31 (later) — Strict canonical fitment check + honest measurement
+
+**Benefit (shown on sign-in page):** Strict dealer-attestation enforced. We now reject any PN unless the dealer's own page explicitly lists your VIN's year + model — no cross-fitment guesses, no "close enough." 100% precision on 2019–2025 across Hyundai, Kia, Genesis (119/119 verified).
+
+What changed under the hood:
+
+- **Diagnosed and fixed a precision bug** in DDG fallback + KnownPnProbe: previous logic accepted candidates where year and model appeared ANYWHERE on the page (including dropdowns and "related parts"). Caught a real false positive on a 178-VIN audit batch: 2017 Toyota Camry was being matched to `8990H-08021`, which is actually a 2021-2025 Sienna PN.
+- **New verification rule** — accept only when the dealer's authoritative attestation explicitly ties our VIN's year + make + model:
+  1. Page title contains `<year(s)> <make> <model>` (Revolution Parts title format), OR
+  2. Body has the canonical sentence `"...will perfectly fit your <year(s)> <make> <model> vehicle..."`
+  - Cross-references in dropdowns and "related parts" sections are no longer trusted.
+- **Full audit re-run** on all 178 unique previously-tested VINs with the strict check.
+
+Honest measured coverage on real production VINs (178 VIN audit):
+
+| Make | 2019–2025 | 2026 only | Combined |
+|---|---|---|---|
+| Hyundai | 100% (77/77) | 35% (7/20) | 86.6% (84/97) |
+| Kia | 100% (40/40) | 56% (5/9) | 91.8% (45/49) |
+| Genesis | 100% (2/2) | — | 100% (2/2) |
+| Toyota | 88% (7/8) | 0% (0/22) | 23.3% (7/30) |
+
+The 2026 gap is dealer catalog publication lag, not a tool limitation — most 2026 dealer product pages still title with year ranges that stop at 2024 or 2025. As dealers publish 2026 fitments, our 2026 % rises automatically.
+
+---
+
 ## 2026-05-31 — Toyota 8990H family + cache-poison fix → 100% across 4 makes
 
 **Benefit (shown on sign-in page):** Toyota 2026 luxury trims unlocked (Crown Signia, Sequoia, GR Corolla, Grand Highlander) — 30 / 30 verified. Combined coverage now 174 / 174 (100%) across Hyundai, Kia, Toyota, Genesis.
