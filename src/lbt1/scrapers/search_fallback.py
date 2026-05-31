@@ -223,10 +223,17 @@ class DuckDuckGoSearchFallbackDriver:
             if r.ok and r.html:
                 results = self._parse_ddg_html(r.html, dealer_host)
 
-        # Cache forever (dealer catalogs stable). Empty results also
-        # cached to avoid re-querying.
-        cache[query] = [{"url": u, "snippet": s} for u, s in results]
-        _save_cache(cache)
+        # Cache forever — but ONLY non-empty results. Empty results almost
+        # always come from transient ScrapFly throttles (429) or DDG rate
+        # limits, not from "the dealer truly has no PN for this query".
+        # Caching empty poisons the cache: every future lookup short-circuits
+        # to the empty result, and DDG fallback returns 0 even when the
+        # answer is plainly indexed. (Diagnosed 2026-05-30: 6 stuck VINs
+        # were ALL unverifiable due to this; one cache wipe + concurrency=1
+        # rerun verified 16/16.)
+        if results:
+            cache[query] = [{"url": u, "snippet": s} for u, s in results]
+            _save_cache(cache)
         return results
 
     async def _fetch_and_parse_ddg_direct(

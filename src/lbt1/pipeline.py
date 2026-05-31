@@ -18,6 +18,7 @@ from lbt1.scrapers.genesis import GenesisOempartsDriver
 from lbt1.scrapers.hyundai import HyundaiOempartsDriver
 from lbt1.scrapers.hyundaioempart import HyundaiOemPartDriver
 from lbt1.scrapers.kia import KiaOempartsDriver
+from lbt1.scrapers.known_pn_probe import KnownPnProbeDriver
 from lbt1.scrapers.search_fallback import DuckDuckGoSearchFallbackDriver
 from lbt1.scrapers.simplepart import (
     HyundaiCanadaDriver, KiaUsOfficialDriver, SimplepartDriver,
@@ -220,12 +221,13 @@ def _drivers_for_make(make: str) -> list[type]:
     m = (make or "").strip().lower()
     if m == "kia":
         return [KiaOempartsDriver, KiaUsOfficialDriver,
-                DuckDuckGoSearchFallbackDriver]
+                DuckDuckGoSearchFallbackDriver, KnownPnProbeDriver]
     if m == "hyundai":
         return [HyundaiOempartsDriver, HyundaiOemPartDriver, HyundaiCanadaDriver,
-                DuckDuckGoSearchFallbackDriver]
+                DuckDuckGoSearchFallbackDriver, KnownPnProbeDriver]
     if m == "genesis":
-        return [GenesisOempartsDriver, DuckDuckGoSearchFallbackDriver]
+        return [GenesisOempartsDriver, DuckDuckGoSearchFallbackDriver,
+                KnownPnProbeDriver]
     if m == "toyota":
         return [ToyotaOempartsDriver, DuckDuckGoSearchFallbackDriver]
     return []
