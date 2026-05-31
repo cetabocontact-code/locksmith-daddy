@@ -302,31 +302,89 @@ class DuckDuckGoSearchFallbackDriver:
 
         year = str(profile.year) if profile.year else ""
         model_lc = (profile.model or "").split(",")[0].strip().lower()
+        make_lc = (profile.make or "").strip().lower()
         h1 = soup.find("h1")
         h1_text = h1.get_text(" ", strip=True).lower() if h1 else ""
         title_lc = title.lower()
         title_h1 = title_lc + " " + h1_text
 
-        # Year check — must be present somewhere on the page (the dealer's
-        # title or fitment table). If title says "2019-2024" we accept.
-        year_in_title = year in title_h1
-        year_in_text = year in text
-        if not (year_in_title or year_in_text):
+        # CANONICAL FITMENT CHECK (final form 2026-05-31):
+        #
+        # The dealer's authoritative attestation lives in TWO places:
+        #
+        #   1. The page TITLE — Revolution Parts always titles dealer pages
+        #      as "<year(s)> <make> <model> <part name> <pn>".
+        #
+        #   2. The canonical body sentence — every Revolution Parts page
+        #      contains "...will perfectly fit your <year(s)> <make> <model>
+        #      vehicle..." as a marketing template.
+        #
+        # We accept the page IF either authoritative location says our VIN
+        # fits. Cross-references in dropdowns, "related parts", or
+        # "customers also viewed" sections are NOT trusted — those caused
+        # confirmed false positives on 2017 Toyota Camry → 8990H-08021
+        # (Sienna PN) because the dropdown listed multiple recent models.
+        if not (year and model_lc and make_lc):
             await self._emit(
-                "Candidate dropped (year not mentioned anywhere)", "info",
-                f"title={title[:80]!r}",
+                "Candidate dropped (missing year/make/model)", "info",
             )
             return None
 
-        # Model check — title preferred (high confidence) but body fitment
-        # acceptable. Body match must NOT also mention other models around
-        # the keyword (cheap noise filter — full noise removal is later).
-        model_in_title = model_lc in title_h1
-        model_in_body = model_lc in text
-        if not (model_in_title or model_in_body):
+        make_re = re.escape(make_lc)
+        # Model may have spaces — "Santa Fe", "Land Cruiser", "Grand
+        # Highlander", "Corolla Cross"
+        model_re = re.escape(model_lc).replace(r"\ ", r"\s+")
+        year_int = int(year)
+
+        def _check_phrase(haystack: str, source_label: str) -> str | None:
+            # Look for "<year> <make> <model>" (single year)
+            single = rf"\b{year}\s+{make_re}\s+{model_re}\b"
+            if re.search(single, haystack):
+                return f"{source_label}: '{year} {make_lc} {model_lc}'"
+            # Look for "<yyyy>-<yyyy> <make> <model>" (year range)
+            rng = rf"\b(\d{{4}})\s*[\-–—]\s*(\d{{4}})\s+{make_re}\s+{model_re}\b"
+            for m in re.finditer(rng, haystack):
+                lo, hi = int(m.group(1)), int(m.group(2))
+                if lo <= year_int <= hi:
+                    return (
+                        f"{source_label}: '{m.group(1)}-{m.group(2)} "
+                        f"{make_lc} {model_lc}' covering {year}"
+                    )
+            return None
+
+        # 1) Title/H1 must explicitly include our year + make + model
+        #    (Revolution Parts title format: "<year(s)> <make> <model> <part>")
+        fit_kind = _check_phrase(title_h1, "title")
+
+        # 2) Canonical body fitment phrase: "fit your <year(s)> <make> <model>"
+        if not fit_kind:
+            # Extract just the canonical fitment sentence and check it.
+            # Pattern: "(perfectly )?fit your <YYYY[-YYYY]> <make> <model> vehicle"
+            canonical = re.search(
+                r"fit\s+your\s+(\d{4}(?:\s*[\-–—]\s*\d{4})?)\s+"
+                rf"{make_re}\s+{model_re}\s+vehicle",
+                text,
+            )
+            if canonical:
+                year_token = canonical.group(1)
+                rng_m = re.match(r"(\d{4})\s*[\-–—]\s*(\d{4})", year_token)
+                if rng_m:
+                    lo, hi = int(rng_m.group(1)), int(rng_m.group(2))
+                    if lo <= year_int <= hi:
+                        fit_kind = (
+                            f"canonical fitment: '{year_token} {make_lc} "
+                            f"{model_lc}' covering {year}"
+                        )
+                elif year_token.strip() == year:
+                    fit_kind = (
+                        f"canonical fitment: '{year_token} {make_lc} "
+                        f"{model_lc}'"
+                    )
+
+        if not fit_kind:
             await self._emit(
-                "Candidate dropped (model not mentioned anywhere)", "info",
-                f"title={title[:80]!r}",
+                "Candidate dropped (no dealer attestation for our year+make+model)",
+                "info", f"title={title[:80]!r}",
             )
             return None
 
@@ -347,7 +405,7 @@ class DuckDuckGoSearchFallbackDriver:
             key_type=key_type,
             source_url=url,
             category_path=f"DDG-fallback: {dealer_host}",
-            fitment_evidence=f"Title confirms {year} {model_lc}",
+            fitment_evidence=f"Page has {fit_kind}",
             dealer_verified=True,
             notes="Found via DDG fallback search of dealer site",
         )

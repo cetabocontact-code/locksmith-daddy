@@ -1,0 +1,2 @@
+vin,year,make,model,trim,status,primary_pn,all_pns,expected_pns,matched,duration_s,error
+KMHLS4DG5SU925578,2025,HYUNDAI,Elantra,SEL Convenience,DEALER_VERIFIED_BY_VIN,95440-AA500,"95440-AA500, 95440-AA501",,unknown,47,

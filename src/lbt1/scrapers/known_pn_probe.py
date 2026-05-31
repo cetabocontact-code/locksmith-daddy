@@ -290,34 +290,61 @@ class KnownPnProbeDriver:
 
         year = str(profile.year) if profile.year else ""
         model_lc = (profile.model or "").split(",")[0].strip().lower()
+        make_lc = (profile.make or "").strip().lower()
 
-        # Year check: must appear in title (best) or anywhere in body.
-        # Dealer pages often say "2024-2026 Hyundai Elantra" in title —
-        # check if our year falls within that title range explicitly.
-        year_in_title = year in title_h1
-        year_in_body = year in body_text
-        # Also accept year ranges like "2024-2026" or "2023 – 2026"
-        year_in_range = False
-        if year:
-            for m in re.finditer(
-                r"(\d{4})\s*[-–—]\s*(\d{4})", body_text + " " + title_h1,
-            ):
-                lo, hi = int(m.group(1)), int(m.group(2))
-                if lo <= int(year) <= hi:
-                    year_in_range = True
-                    break
-        if not (year_in_title or year_in_body or year_in_range):
-            await self._emit(
-                f"KnownPN: year not on page for {pn}", "info",
-                f"title={title[:80]!r}",
-            )
+        # CANONICAL FITMENT CHECK (mirrors DDG fallback final logic):
+        # Pass only on dealer's AUTHORITATIVE attestation:
+        #   - Title contains year+make+model (Revolution Parts title format)
+        #   - OR canonical body sentence "fit your YYYY[-YYYY] make model vehicle"
+        # Cross-references in dropdowns and "related parts" are not trusted.
+        if not (year and model_lc and make_lc):
             return None
 
-        # Model check: must mention the model name somewhere.
-        if model_lc and model_lc not in title_h1 and model_lc not in body_text:
+        make_re = re.escape(make_lc)
+        model_re = re.escape(model_lc).replace(r"\ ", r"\s+")
+        year_int = int(year)
+
+        def _check_title(haystack: str) -> str | None:
+            single = rf"\b{year}\s+{make_re}\s+{model_re}\b"
+            if re.search(single, haystack):
+                return f"title: '{year} {make_lc} {model_lc}'"
+            rng = rf"\b(\d{{4}})\s*[\-–—]\s*(\d{{4}})\s+{make_re}\s+{model_re}\b"
+            for m in re.finditer(rng, haystack):
+                lo, hi = int(m.group(1)), int(m.group(2))
+                if lo <= year_int <= hi:
+                    return (
+                        f"title: '{m.group(1)}-{m.group(2)} {make_lc} "
+                        f"{model_lc}' covering {year}"
+                    )
+            return None
+
+        fit_kind = _check_title(title_h1)
+        if not fit_kind:
+            canonical = re.search(
+                r"fit\s+your\s+(\d{4}(?:\s*[\-–—]\s*\d{4})?)\s+"
+                rf"{make_re}\s+{model_re}\s+vehicle",
+                body_text,
+            )
+            if canonical:
+                year_token = canonical.group(1)
+                rng_m = re.match(r"(\d{4})\s*[\-–—]\s*(\d{4})", year_token)
+                if rng_m:
+                    lo, hi = int(rng_m.group(1)), int(rng_m.group(2))
+                    if lo <= year_int <= hi:
+                        fit_kind = (
+                            f"canonical fitment: '{year_token} {make_lc} "
+                            f"{model_lc}' covering {year}"
+                        )
+                elif year_token.strip() == year:
+                    fit_kind = (
+                        f"canonical fitment: '{year_token} {make_lc} "
+                        f"{model_lc}'"
+                    )
+
+        if not fit_kind:
             await self._emit(
-                f"KnownPN: model not on page for {pn}", "info",
-                f"title={title[:80]!r}",
+                f"KnownPN: no dealer attestation for {pn} on our year+make+model",
+                "info", f"title={title[:80]!r}",
             )
             return None
 
