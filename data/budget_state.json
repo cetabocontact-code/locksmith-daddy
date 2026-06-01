@@ -1,8 +1,8 @@
 {
-  "snapshot_at": "2026-05-29T08:19:26+00:00",
-  "used": 20745,
+  "snapshot_at": "2026-06-01T21:00:04+00:00",
+  "used": 155653,
   "cap": 200000,
-  "remaining": 179255,
-  "used_pct": 10.3725,
-  "days_to_reset": 30
+  "remaining": 44347,
+  "used_pct": 77.8265,
+  "days_to_reset": 27
 }

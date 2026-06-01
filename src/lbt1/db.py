@@ -155,6 +155,50 @@ CREATE TABLE IF NOT EXISTS part_reports (
 );
 
 CREATE INDEX IF NOT EXISTS idx_reports_user ON part_reports(user_id, created_at DESC);
+
+-- Enterprise / reseller lead capture from /enterprise contact form
+CREATE TABLE IF NOT EXISTS enterprise_leads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company TEXT NOT NULL,
+    contact_name TEXT NOT NULL,
+    contact_email TEXT NOT NULL,
+    phone TEXT,
+    role TEXT NOT NULL,
+    monthly_volume TEXT NOT NULL,
+    notes TEXT,
+    source_ip TEXT,
+    created_at TEXT NOT NULL,
+    responded_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_enterprise_leads_created ON enterprise_leads(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_enterprise_leads_pending ON enterprise_leads(responded_at) WHERE responded_at IS NULL;
+
+-- Lookup credits balance per user (replaces $79/mo Pro subscription model
+-- with per-VIN packs: $7.99 single, $49/10-pack). Credits never expire and
+-- are decremented ONLY when a lookup returns DEALER_VERIFIED_BY_VIN.
+CREATE TABLE IF NOT EXISTS lookup_credits (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    balance INTEGER NOT NULL DEFAULT 0,
+    lifetime_purchased INTEGER NOT NULL DEFAULT 0,
+    lifetime_consumed INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS credit_purchases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    stripe_session_id TEXT NOT NULL UNIQUE,
+    stripe_payment_intent TEXT,
+    pack_kind TEXT NOT NULL,
+    credits_granted INTEGER NOT NULL,
+    amount_cents INTEGER NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'usd',
+    customer_email TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL,
+    completed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_credit_purchases_user ON credit_purchases(user_id, created_at DESC);
 """
 
 # Indexes that depend on user-table columns added by the migration. These run
@@ -895,6 +939,167 @@ def purge_expired_lookups() -> int:
     with get_db() as db:
         cur = db.execute("DELETE FROM lookups WHERE expires_at <= ?", (utcnow_iso(),))
         return cur.rowcount or 0
+
+
+# ─── Enterprise / reseller lead capture ──────────────────────────────────────
+
+
+def create_enterprise_lead(
+    *,
+    company: str,
+    contact_name: str,
+    contact_email: str,
+    phone: str | None,
+    role: str,
+    monthly_volume: str,
+    notes: str | None,
+    source_ip: str | None,
+) -> int:
+    """Store an enterprise-form submission. Idempotent on (company, contact_email)
+    within 24h — repeated submits from same lead are deduped to avoid spam."""
+    with get_db() as db:
+        # Light dedupe: if same email submitted in last 24h, return existing id.
+        recent = db.execute(
+            """
+            SELECT id FROM enterprise_leads
+            WHERE contact_email = ?
+              AND created_at > datetime('now', '-1 day')
+            ORDER BY id DESC LIMIT 1
+            """,
+            (contact_email.strip().lower(),),
+        ).fetchone()
+        if recent:
+            return int(recent["id"])
+        cur = db.execute(
+            """
+            INSERT INTO enterprise_leads(
+                company, contact_name, contact_email, phone, role,
+                monthly_volume, notes, source_ip, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                company.strip(),
+                contact_name.strip(),
+                contact_email.strip().lower(),
+                phone.strip() if phone else None,
+                role.strip(),
+                monthly_volume.strip(),
+                notes.strip() if notes else None,
+                source_ip,
+                utcnow_iso(),
+            ),
+        )
+        return int(cur.lastrowid)  # type: ignore[arg-type]
+
+
+# ─── Lookup credits (per-VIN pack model) ─────────────────────────────────────
+
+
+def ensure_credits_row(user_id: int) -> None:
+    """Idempotent: create the lookup_credits row for a user if missing."""
+    with get_db() as db:
+        db.execute(
+            """
+            INSERT OR IGNORE INTO lookup_credits(user_id, balance, updated_at)
+            VALUES(?, 0, ?)
+            """,
+            (user_id, utcnow_iso()),
+        )
+
+
+def get_credit_balance(user_id: int) -> int:
+    with get_db() as db:
+        row = db.execute(
+            "SELECT balance FROM lookup_credits WHERE user_id = ?", (user_id,)
+        ).fetchone()
+        return int(row["balance"]) if row else 0
+
+
+def grant_credits(user_id: int, n: int) -> None:
+    """Add n credits to a user's balance. Called after a successful Stripe webhook."""
+    ensure_credits_row(user_id)
+    with get_db() as db:
+        db.execute(
+            """
+            UPDATE lookup_credits
+            SET balance = balance + ?,
+                lifetime_purchased = lifetime_purchased + ?,
+                updated_at = ?
+            WHERE user_id = ?
+            """,
+            (n, n, utcnow_iso(), user_id),
+        )
+
+
+def consume_credit(user_id: int) -> bool:
+    """Atomically decrement one credit. Returns True if decrement succeeded.
+    Should be called ONLY when a lookup actually returns DEALER_VERIFIED_BY_VIN
+    (matches the zero-refund "you only pay when we deliver" policy)."""
+    ensure_credits_row(user_id)
+    with get_db() as db:
+        cur = db.execute(
+            """
+            UPDATE lookup_credits
+            SET balance = balance - 1,
+                lifetime_consumed = lifetime_consumed + 1,
+                updated_at = ?
+            WHERE user_id = ? AND balance > 0
+            """,
+            (utcnow_iso(), user_id),
+        )
+        return (cur.rowcount or 0) > 0
+
+
+def record_pending_purchase(
+    *,
+    stripe_session_id: str,
+    pack_kind: str,
+    credits: int,
+    amount_cents: int,
+    customer_email: str | None = None,
+    user_id: int | None = None,
+) -> None:
+    """Record a Stripe Checkout session at creation time. The webhook later
+    flips status to 'paid' and grants credits."""
+    with get_db() as db:
+        db.execute(
+            """
+            INSERT OR IGNORE INTO credit_purchases(
+                stripe_session_id, pack_kind, credits_granted, amount_cents,
+                customer_email, user_id, status, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, 'pending', ?)
+            """,
+            (
+                stripe_session_id, pack_kind, credits, amount_cents,
+                customer_email, user_id, utcnow_iso(),
+            ),
+        )
+
+
+def complete_purchase(
+    stripe_session_id: str, payment_intent: str, user_id: int | None,
+) -> tuple[bool, int]:
+    """Idempotent: mark a purchase paid + return (newly_completed, credits_granted).
+    If row already 'paid', returns (False, 0) — webhook may fire multiple times."""
+    with get_db() as db:
+        row = db.execute(
+            "SELECT id, credits_granted, status FROM credit_purchases WHERE stripe_session_id = ?",
+            (stripe_session_id,),
+        ).fetchone()
+        if not row:
+            return False, 0
+        if row["status"] == "paid":
+            return False, 0
+        db.execute(
+            """
+            UPDATE credit_purchases
+            SET status = 'paid', stripe_payment_intent = ?, completed_at = ?,
+                user_id = COALESCE(user_id, ?)
+            WHERE stripe_session_id = ?
+            """,
+            (payment_intent, utcnow_iso(), user_id, stripe_session_id),
+        )
+        return True, int(row["credits_granted"])
 
 
 # ─── Report helpers ──────────────────────────────────────────────────────────

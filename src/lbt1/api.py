@@ -523,6 +523,111 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+# ─── Anti-AI / anti-scraper headers ──────────────────────────────────────────
+
+@app.middleware("http")
+async def _add_anti_ai_headers(request: Request, call_next):
+    """Add X-Robots-Tag to discourage AI/LLM training scrapers.
+
+    Honest scrapers (GPTBot, ClaudeBot, CCBot, Google-Extended, etc.) respect
+    these tags. Combined with robots.txt and Cloudflare WAF, this keeps our
+    tool's proprietary surface (dealer-resolution logic, query patterns) off
+    public training datasets. Real user-facing pages still render normally —
+    the header only affects automated crawlers.
+    """
+    response = await call_next(request)
+    # noai/noimageai are the emerging conventions; noindex/nofollow are belt+suspenders.
+    response.headers["X-Robots-Tag"] = "noai, noimageai, noindex, nofollow"
+    return response
+
+
+@app.get("/robots.txt", response_class=HTMLResponse)
+async def robots_txt() -> HTMLResponse:
+    """Block AI training crawlers and the actual lookup surface from honest bots."""
+    body = (
+        "User-agent: GPTBot\nDisallow: /\n\n"
+        "User-agent: ClaudeBot\nDisallow: /\n\n"
+        "User-agent: anthropic-ai\nDisallow: /\n\n"
+        "User-agent: Google-Extended\nDisallow: /\n\n"
+        "User-agent: CCBot\nDisallow: /\n\n"
+        "User-agent: PerplexityBot\nDisallow: /\n\n"
+        "User-agent: cohere-ai\nDisallow: /\n\n"
+        "User-agent: Bytespider\nDisallow: /\n\n"
+        "User-agent: meta-externalagent\nDisallow: /\n\n"
+        "User-agent: *\n"
+        "Disallow: /api/\n"
+        "Disallow: /lookup\n"
+        "Disallow: /admin\n"
+        "Disallow: /buy/\n"
+        "Disallow: /enterprise\n"
+        "Allow: /\n"
+    )
+    return HTMLResponse(content=body, media_type="text/plain")
+
+
+# ─── Static policy pages (privacy, refund, enterprise) ───────────────────────
+
+@app.get("/privacy", response_class=HTMLResponse)
+async def privacy_page() -> HTMLResponse:
+    return _render("privacy.html")
+
+
+@app.get("/refund-policy", response_class=HTMLResponse)
+async def refund_page() -> HTMLResponse:
+    return _render("refund.html")
+
+
+@app.get("/enterprise", response_class=HTMLResponse)
+async def enterprise_page() -> HTMLResponse:
+    return _render("enterprise.html", success_html="", error_html="")
+
+
+@app.post("/enterprise")
+async def enterprise_submit(
+    request: Request,
+    company: str = Form(...),
+    contact_name: str = Form(...),
+    contact_email: str = Form(...),
+    phone: str = Form(""),
+    role: str = Form(...),
+    monthly_volume: str = Form(...),
+    notes: str = Form(""),
+) -> Response:
+    """Capture enterprise / reseller lead → DB + best-effort email to Cetabo."""
+    ip = abuse.client_ip(request)
+    try:
+        db.create_enterprise_lead(
+            company=company,
+            contact_name=contact_name,
+            contact_email=contact_email,
+            phone=phone or None,
+            role=role,
+            monthly_volume=monthly_volume,
+            notes=notes or None,
+            source_ip=ip,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Enterprise lead capture DB failed: %s", exc)
+        return RedirectResponse(
+            f"/enterprise?error={_url_quote('Could not save your request. Please email cetabo.contact@gmail.com.')}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+    # Best-effort email to ops inbox; don't block the user response on it.
+    try:
+        notifications.send_enterprise_lead_notification(
+            company=company,
+            contact_name=contact_name,
+            contact_email=contact_email,
+            phone=phone,
+            role=role,
+            monthly_volume=monthly_volume,
+            notes=notes,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Enterprise lead email best-effort failed: %s", exc)
+    return RedirectResponse("/enterprise?ok=1", status_code=status.HTTP_303_SEE_OTHER)
+
+
 @app.get("/api/founder-counter")
 async def founder_counter() -> dict:
     """Public endpoint: how many founder spots remain. Used by landing/signup page."""

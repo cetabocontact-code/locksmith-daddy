@@ -148,3 +148,27 @@ def send_newsletter_confirmation(*, to: str, full_name: str) -> bool:
         "— Locksmith Daddy\n"
     )
     return send(to, "Subscribed to Locksmith Daddy updates", body)
+
+
+def send_enterprise_lead_notification(
+    *, company: str, contact_name: str, contact_email: str, phone: str,
+    role: str, monthly_volume: str, notes: str,
+) -> bool:
+    """Notify the Cetabo ops inbox that an enterprise lead just submitted
+    the /enterprise contact form. Goes to cetabo.contact@gmail.com."""
+    body = (
+        "New enterprise / reseller lead from /enterprise:\n\n"
+        f"Company:           {company}\n"
+        f"Contact name:      {contact_name}\n"
+        f"Contact email:     {contact_email}\n"
+        f"Phone:             {phone or '(not provided)'}\n"
+        f"Role / type:       {role}\n"
+        f"Monthly volume:    {monthly_volume}\n\n"
+        f"Notes:\n{notes or '(none)'}\n\n"
+        "— Locksmith Daddy automated form\n"
+    )
+    return send(
+        "cetabo.contact@gmail.com",
+        f"[LD Enterprise] New lead: {company} ({monthly_volume})",
+        body,
+    )

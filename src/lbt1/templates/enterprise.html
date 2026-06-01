@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow, noai, noimageai">
+  <title>Enterprise / Reseller · Locksmith Daddy</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    :root { --bg: #0f1419; --panel: #1a2027; --border: #2a3441; --text: #e6edf3; --muted: #8b949e; --accent: #ff6b35; --red: #f85149; --green: #2ea043; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 24px 16px; line-height: 1.5; }
+    .wrap { max-width: 660px; margin: 0 auto; }
+    h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.5px; }
+    .subtitle { color: var(--muted); margin-bottom: 24px; font-size: 14px; }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 24px; margin-bottom: 20px; }
+    h2 { font-size: 17px; margin: 0 0 14px; }
+    p { font-size: 14px; }
+    label { display: block; color: var(--muted); font-size: 13px; margin: 14px 0 4px; }
+    label:first-of-type { margin-top: 0; }
+    input, textarea, select { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; font-size: 14px; font-family: inherit; }
+    textarea { min-height: 90px; resize: vertical; }
+    input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    button.primary { width: 100%; margin-top: 18px; background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 11px; font-size: 15px; font-weight: 600; cursor: pointer; }
+    .success { background: rgba(46, 160, 67, 0.1); border: 1px solid rgba(46, 160, 67, 0.3); color: var(--green); padding: 12px 14px; border-radius: 6px; margin-bottom: 16px; font-size: 13px; }
+    .error { background: rgba(248, 81, 73, 0.1); border: 1px solid rgba(248, 81, 73, 0.3); color: var(--red); padding: 12px 14px; border-radius: 6px; margin-bottom: 16px; font-size: 13px; }
+    .footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 32px; }
+    .footer a { color: var(--accent); text-decoration: none; }
+    ul.benefits { padding-left: 22px; }
+    ul.benefits li { margin-bottom: 6px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Enterprise / Reseller</h1>
+    <div class="subtitle">Volume API access + white-label options for parts wholesalers, repo companies, auction houses, and locksmith chains.</div>
+
+    {{ success_html }}
+    {{ error_html }}
+
+    <div class="panel">
+      <h2>Built for high-volume operators</h2>
+      <ul class="benefits">
+        <li>Dedicated API keys with custom rate limits</li>
+        <li>Per-account volume discount tiers (50¢–$2 per VIN at scale)</li>
+        <li>Bulk batch upload (CSV) with email-on-complete</li>
+        <li>White-label option — surface our verified results inside your own software</li>
+        <li>SLA on uptime and result freshness</li>
+        <li>Priority dealer-catalog expansion for makes you specialize in</li>
+      </ul>
+    </div>
+
+    <div class="panel">
+      <h2>Tell us about your operation</h2>
+      <form method="post" action="/enterprise">
+        <label for="company">Company / business name</label>
+        <input id="company" name="company" type="text" required>
+
+        <label for="contact_name">Your name</label>
+        <input id="contact_name" name="contact_name" type="text" required>
+
+        <label for="contact_email">Your email</label>
+        <input id="contact_email" name="contact_email" type="email" required>
+
+        <label for="phone">Phone (optional)</label>
+        <input id="phone" name="phone" type="tel">
+
+        <label for="role">What best describes you?</label>
+        <select id="role" name="role" required>
+          <option value="">Choose one…</option>
+          <option value="repo">Repo company</option>
+          <option value="auction">Auction house</option>
+          <option value="wholesaler">Parts wholesaler / distributor</option>
+          <option value="locksmith_chain">Locksmith chain (multi-location)</option>
+          <option value="dealer">Dealer / dealer group</option>
+          <option value="software">Locksmith software integrator</option>
+          <option value="other">Other</option>
+        </select>
+
+        <label for="monthly_volume">Estimated monthly VIN lookups</label>
+        <select id="monthly_volume" name="monthly_volume" required>
+          <option value="">Choose one…</option>
+          <option value="50-200">50–200 / month</option>
+          <option value="200-1000">200–1,000 / month</option>
+          <option value="1000-5000">1,000–5,000 / month</option>
+          <option value="5000+">5,000+ / month</option>
+        </select>
+
+        <label for="notes">Anything else we should know? (Makes you focus on, integrations you need, deadlines, etc.)</label>
+        <textarea id="notes" name="notes"></textarea>
+
+        <button type="submit" class="primary">Request a custom quote</button>
+      </form>
+    </div>
+
+    <div class="footer">
+      Or email us directly: <a href="mailto:cetabo.contact@gmail.com">cetabo.contact@gmail.com</a><br>
+      LocksmithDaddy is a Cetabo LLC venture.
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      const params = new URLSearchParams(window.location.search);
+      const err = params.get('error');
+      const ok = params.get('ok');
+      if (err) {
+        const d = document.createElement('div');
+        d.className = 'error';
+        d.textContent = err;
+        document.querySelector('.subtitle').after(d);
+      }
+      if (ok) {
+        const d = document.createElement('div');
+        d.className = 'success';
+        d.textContent = "Got it — we'll be in touch within one business day at the email you provided.";
+        document.querySelector('.subtitle').after(d);
+      }
+    })();
+  </script>
+</body>
+</html>
