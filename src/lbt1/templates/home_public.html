@@ -25,12 +25,45 @@
     button.unlock { background: var(--green); }
     .steps { display: flex; flex-direction: column; gap: 10px; margin: 14px 0; }
     .step { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
-    .step .dot { width: 18px; height: 18px; border-radius: 50%; background: var(--border); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 11px; color: var(--muted); }
+    .step .dot { width: 22px; height: 22px; border-radius: 50%; background: var(--border); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 11px; color: var(--muted); position: relative; }
     .step.done .dot { background: var(--green); color: #fff; }
-    .step.active .dot { background: var(--accent); color: #fff; animation: pulse 1.5s infinite; }
-    @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 107, 53, 0.5); } 50% { box-shadow: 0 0 0 6px rgba(255, 107, 53, 0); } }
+    .step.done .dot::after { content: "✓"; font-weight: 700; font-size: 13px; }
+    .step.done .dot > span.num { display: none; }
+    .step.active .dot { background: transparent; color: var(--accent); border: 2px solid rgba(255, 107, 53, 0.25); }
+    .step.active .dot > span.num { display: none; }
+    .step.active .dot::before {
+      content: "";
+      position: absolute;
+      inset: -2px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      border-top-color: var(--accent);
+      border-right-color: var(--accent);
+      animation: spin 0.85s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
     .step.error .dot { background: var(--red); color: #fff; }
+    .step.error .dot::after { content: "!"; font-weight: 800; }
+    .step.error .dot > span.num { display: none; }
     .step.fail .dot { background: var(--yellow); color: #fff; }
+    .step.fail .dot::after { content: "—"; font-weight: 700; }
+    .step.fail .dot > span.num { display: none; }
+    .working-bar { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin: 12px 0 4px; position: relative; }
+    .working-bar::after {
+      content: "";
+      position: absolute;
+      left: -30%;
+      top: 0;
+      bottom: 0;
+      width: 30%;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      animation: slide 1.6s ease-in-out infinite;
+    }
+    @keyframes slide { 0% { left: -30%; } 100% { left: 100%; } }
+    .working-bar.done::after { display: none; }
+    .working-text { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+    .working-text .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: blink 1.2s ease-in-out infinite; flex-shrink: 0; }
+    @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0.35; } }
     .reveal-block { background: rgba(46, 160, 67, 0.08); border: 1px solid rgba(46, 160, 67, 0.3); border-radius: 8px; padding: 16px 18px; margin: 12px 0; }
     .reveal-block h3 { font-size: 14px; margin: 0 0 6px; color: var(--green); }
     .reveal-block .vehicle { font-size: 17px; font-weight: 600; color: var(--text); }
@@ -113,11 +146,16 @@
     <!-- Step 2+: progress -->
     <div class="panel" id="progress-panel" style="display:none;">
       <div class="steps">
-        <div class="step" id="step-decode"><span class="dot">1</span><span class="step-label">Decoding VIN from NHTSA…</span></div>
-        <div class="step" id="step-scrape"><span class="dot">2</span><span class="step-label">Checking dealer catalog…</span></div>
-        <div class="step" id="step-verify"><span class="dot">3</span><span class="step-label">Verifying dealer attestation…</span></div>
+        <div class="step" id="step-decode"><span class="dot"><span class="num">1</span></span><span class="step-label">Decoding VIN from NHTSA…</span></div>
+        <div class="step" id="step-scrape"><span class="dot"><span class="num">2</span></span><span class="step-label">Checking dealer catalog…</span></div>
+        <div class="step" id="step-verify"><span class="dot"><span class="num">3</span></span><span class="step-label">Verifying dealer attestation…</span></div>
       </div>
-      <div class="hint" id="elapsed-hint">This usually takes 30 seconds to 3 minutes. You can close this tab — we'll email the result when ready.</div>
+      <div class="working-bar" id="working-bar"></div>
+      <div class="working-text" id="working-text">
+        <span class="live-dot"></span>
+        <span id="working-msg">Running live — checking the dealer's catalog for this exact VIN…</span>
+      </div>
+      <div class="hint" id="elapsed-hint" style="margin-top: 8px;">Elapsed 0s · This usually takes 30 seconds to 3 minutes. You can close this tab — we'll email when ready.</div>
     </div>
 
     <!-- Step 3: found, paywalled -->
@@ -220,19 +258,41 @@
         if (label) el.querySelector('.step-label').textContent = label;
       }
 
+      const workingPhrases = [
+        'Running live — checking the dealer\'s catalog for this exact VIN…',
+        'Probing primary dealer source…',
+        'Cross-checking against backup dealer catalogs…',
+        'Validating fitment attestation on the dealer\'s product page…',
+        'Filtering candidate part numbers against your VIN\'s year + trim…',
+        'Final verification step in progress…',
+      ];
+      let workingMsgIdx = 0;
+      let workingMsgTimer = null;
       function startElapsed() {
         startedAt = Date.now();
         elapsedTimer = setInterval(() => {
           const s = Math.floor((Date.now() - startedAt) / 1000);
           $('elapsed-hint').textContent =
-            'Elapsed: ' + s + 's · This usually takes 30 seconds to 3 minutes. You can close this tab — we\'ll email the result when ready.';
+            'Elapsed ' + s + 's · This usually takes 30 seconds to 3 minutes. You can close this tab — we\'ll email when ready.';
         }, 1000);
+        // Rotate the working message every 6 seconds so users see motion
+        // even while the pipeline is grinding through a long scrape.
+        workingMsgTimer = setInterval(() => {
+          workingMsgIdx = (workingMsgIdx + 1) % workingPhrases.length;
+          const msgEl = $('working-msg');
+          if (msgEl) msgEl.textContent = workingPhrases[workingMsgIdx];
+        }, 6000);
       }
 
       function stopTimers() {
         if (pollTimer) clearInterval(pollTimer);
         if (elapsedTimer) clearInterval(elapsedTimer);
-        pollTimer = null; elapsedTimer = null;
+        if (workingMsgTimer) clearInterval(workingMsgTimer);
+        pollTimer = null; elapsedTimer = null; workingMsgTimer = null;
+        const bar = $('working-bar');
+        if (bar) bar.classList.add('done');
+        const txt = $('working-text');
+        if (txt) txt.style.display = 'none';
       }
 
       async function pollJob() {

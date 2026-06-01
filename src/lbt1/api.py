@@ -48,11 +48,12 @@ async def _startup() -> None:
     purged = db.purge_expired_lookups()
     if purged:
         log.info("Startup auto-purge removed %d expired lookup rows", purged)
-    # Idempotent seed of manually-confirmed VIN→PN cases (Crown Signia, etc.)
-    try:
-        db.seed_manual_pn_overrides()
-    except Exception as exc:  # noqa: BLE001
-        log.warning("Manual PN override seed failed (non-fatal): %s", exc)
+    # NOTE: manual_pn_overrides table exists in schema for audit/reference
+    # of human-confirmed VIN→PN cases (phone calls, manual dealer-site
+    # checks), but the pipeline does NOT consult it. The product promise
+    # is "verified live against the dealer's current catalog for THIS exact
+    # VIN" — returning memorized answers breaks that promise. YMM lookups
+    # are commodity; VIN-verified PN is our moat.
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -847,28 +848,10 @@ async def _run_anonymous_lookup_job(job_id: str, vin: str, email: str | None) ->
             _send_result_email(email, job_id, profile, verified=False, error=True)
             return
 
-        # Step 1.5: check manual_pn_overrides BEFORE running live scrape.
-        # Cases where a human (user, VA, or admin) has already confirmed the
-        # answer via phone call / dealer-site VIN-aware widget short-circuit
-        # the live pipeline. Cuts ScrapFly cost to zero on known answers.
-        override = db.get_manual_pn_override(vin)
-        if override:
-            db.finish_lookup_job(
-                job_id,
-                primary_pn=override["primary_pn"],
-                alt_pns=None,
-                dealer_url=override["dealer_url"],
-                confidence_label=override.get("confidence_label") or "HIGH",
-                duration_seconds=int(perf_counter() - started),
-            )
-            log.info(
-                "Job %s short-circuited by manual override (PN=%s)",
-                job_id, override["primary_pn"],
-            )
-            _send_result_email(email, job_id, profile, verified=True)
-            return
-
-        # Step 2: full dealer-verification pipeline
+        # Step 2: full dealer-verification pipeline. Always runs live —
+        # we never return memorized PNs even when a sibling VIN has been
+        # verified before. The product promise is "the dealer's catalog
+        # confirmed THIS exact VIN's PN right now, on this lookup."
         result = await pipeline.lookup(vin)
         pn = None
         alts: list[str] = []
