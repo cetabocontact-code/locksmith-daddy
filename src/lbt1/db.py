@@ -199,6 +199,38 @@ CREATE TABLE IF NOT EXISTS credit_purchases (
     completed_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_credit_purchases_user ON credit_purchases(user_id, created_at DESC);
+
+-- Anonymous (no-login) lookup jobs for the public homepage paywall flow.
+-- The actual PN lives ONLY in this table column server-side. It is never
+-- returned to the browser until `paid_at` is set by a confirmed Stripe
+-- webhook. This is the paywall — a competitor inspecting DevTools sees the
+-- vehicle decode and a job_id, never the PN.
+CREATE TABLE IF NOT EXISTS lookup_jobs (
+    job_id TEXT PRIMARY KEY,            -- random UUID, surfaced to client
+    vin TEXT NOT NULL,
+    email TEXT,                          -- optional, captured for async result delivery
+    status TEXT NOT NULL DEFAULT 'queued',  -- queued | running | verified | unverified | error
+    vehicle_year INTEGER,
+    vehicle_make TEXT,
+    vehicle_model TEXT,
+    vehicle_trim TEXT,
+    primary_pn TEXT,                     -- SERVER-ONLY. Never sent to client until paid.
+    alt_pns_json TEXT,                   -- SERVER-ONLY.
+    dealer_url TEXT,                     -- SERVER-ONLY evidence URL.
+    confidence_label TEXT,
+    duration_seconds INTEGER,
+    error_message TEXT,
+    paid_at TEXT,                        -- gate: only when set does /result/{job_id} reveal PN
+    stripe_session_id TEXT,
+    user_id INTEGER,                     -- nullable; set if user creates account after pay
+    source_ip TEXT,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL             -- auto-purge unpaid jobs after retention
+);
+CREATE INDEX IF NOT EXISTS idx_lookup_jobs_status ON lookup_jobs(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_lookup_jobs_expires ON lookup_jobs(expires_at);
+CREATE INDEX IF NOT EXISTS idx_lookup_jobs_stripe ON lookup_jobs(stripe_session_id);
+CREATE INDEX IF NOT EXISTS idx_lookup_jobs_user ON lookup_jobs(user_id, created_at DESC);
 """
 
 # Indexes that depend on user-table columns added by the migration. These run
@@ -1073,6 +1105,168 @@ def record_pending_purchase(
                 stripe_session_id, pack_kind, credits, amount_cents,
                 customer_email, user_id, utcnow_iso(),
             ),
+        )
+
+
+def create_lookup_job(
+    *, vin: str, email: str | None, source_ip: str | None,
+    retention_days: int = 30,
+) -> str:
+    """Create a queued anonymous lookup job. Returns the public job_id token."""
+    import uuid
+    from datetime import timedelta
+    job_id = uuid.uuid4().hex
+    now = utcnow_iso()
+    expires = (datetime.now(timezone.utc) + timedelta(days=retention_days)).isoformat(timespec="seconds")
+    with get_db() as db:
+        db.execute(
+            """
+            INSERT INTO lookup_jobs(
+                job_id, vin, email, status, source_ip, created_at, expires_at
+            ) VALUES(?, ?, ?, 'queued', ?, ?, ?)
+            """,
+            (job_id, vin.strip().upper(), email, source_ip, now, expires),
+        )
+    return job_id
+
+
+def get_lookup_job_public(job_id: str) -> dict | None:
+    """Return PUBLIC-SAFE fields for the polling/UI layer. Never includes PN
+    until paid_at is set. Browser sees: status, vehicle, paid/unpaid."""
+    with get_db() as db:
+        row = db.execute(
+            """
+            SELECT job_id, status, vehicle_year, vehicle_make, vehicle_model,
+                   vehicle_trim, confidence_label, duration_seconds,
+                   paid_at, error_message
+            FROM lookup_jobs WHERE job_id = ?
+            """,
+            (job_id,),
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["paid"] = bool(d.get("paid_at"))
+        d["has_pn"] = bool(_job_has_pn(job_id))
+        # paid_at is server timestamp; keep raw or drop. Keep, harmless.
+        return d
+
+
+def _job_has_pn(job_id: str) -> bool:
+    with get_db() as db:
+        row = db.execute(
+            "SELECT 1 FROM lookup_jobs WHERE job_id = ? AND primary_pn IS NOT NULL AND primary_pn != ''",
+            (job_id,),
+        ).fetchone()
+        return row is not None
+
+
+def get_lookup_job_paid_result(job_id: str) -> dict | None:
+    """Return the FULL result INCLUDING the PN — only when paid_at is set.
+    Callers MUST gate this behind a paywall check. This is the only function
+    in the codebase that exposes the PN for an anonymous job."""
+    with get_db() as db:
+        row = db.execute(
+            """
+            SELECT job_id, vin, status, vehicle_year, vehicle_make,
+                   vehicle_model, vehicle_trim, primary_pn, alt_pns_json,
+                   dealer_url, confidence_label, paid_at, created_at
+            FROM lookup_jobs
+            WHERE job_id = ? AND paid_at IS NOT NULL
+            """,
+            (job_id,),
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        if d.get("alt_pns_json"):
+            try:
+                d["alt_pns"] = json.loads(d["alt_pns_json"])
+            except Exception:
+                d["alt_pns"] = []
+        else:
+            d["alt_pns"] = []
+        return d
+
+
+def update_lookup_job_decoded(
+    job_id: str, *, year: int | None, make: str | None,
+    model: str | None, trim: str | None,
+) -> None:
+    """Stamp NHTSA-decoded vehicle on the job. Browser sees this immediately
+    so the user gets a 'Vehicle Decoded' step well before dealer scrape ends."""
+    with get_db() as db:
+        db.execute(
+            """
+            UPDATE lookup_jobs
+            SET vehicle_year = ?, vehicle_make = ?, vehicle_model = ?,
+                vehicle_trim = ?, status = 'running'
+            WHERE job_id = ?
+            """,
+            (year, make, model, trim, job_id),
+        )
+
+
+def finish_lookup_job(
+    job_id: str, *, primary_pn: str | None, alt_pns: list[str] | None,
+    dealer_url: str | None, confidence_label: str | None,
+    duration_seconds: int, error_message: str | None = None,
+) -> None:
+    """Mark job complete. Status becomes:
+        - 'verified'   if primary_pn present
+        - 'unverified' if pipeline ran but no PN
+        - 'error'      if exception thrown
+    The PN is stored server-side; client polling won't see it until paid."""
+    status_val = "error" if error_message else (
+        "verified" if primary_pn else "unverified"
+    )
+    with get_db() as db:
+        db.execute(
+            """
+            UPDATE lookup_jobs
+            SET status = ?, primary_pn = ?, alt_pns_json = ?, dealer_url = ?,
+                confidence_label = ?, duration_seconds = ?,
+                error_message = ?
+            WHERE job_id = ?
+            """,
+            (
+                status_val, primary_pn,
+                json.dumps(alt_pns or []) if alt_pns else None,
+                dealer_url, confidence_label, duration_seconds,
+                error_message, job_id,
+            ),
+        )
+
+
+def mark_job_paid(job_id: str, stripe_session_id: str) -> bool:
+    """Set paid_at + stripe_session_id atomically. Returns True if newly paid,
+    False if already paid (idempotent for webhook retries)."""
+    with get_db() as db:
+        existing = db.execute(
+            "SELECT paid_at FROM lookup_jobs WHERE job_id = ?", (job_id,),
+        ).fetchone()
+        if not existing:
+            return False
+        if existing["paid_at"]:
+            return False
+        db.execute(
+            """
+            UPDATE lookup_jobs
+            SET paid_at = ?, stripe_session_id = ?
+            WHERE job_id = ? AND paid_at IS NULL
+            """,
+            (utcnow_iso(), stripe_session_id, job_id),
+        )
+        return True
+
+
+def attach_job_to_user(job_id: str, user_id: int) -> None:
+    """When a user creates an account after paying, link the job to their
+    history so it shows on /dashboard."""
+    with get_db() as db:
+        db.execute(
+            "UPDATE lookup_jobs SET user_id = ? WHERE job_id = ?",
+            (user_id, job_id),
         )
 
 

@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow, noai, noimageai">
+  <title>Locksmith Daddy — VIN to dealer-verified OEM key part number</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    :root { --bg: #0f1419; --panel: #1a2027; --border: #2a3441; --text: #e6edf3; --muted: #8b949e; --accent: #ff6b35; --red: #f85149; --green: #2ea043; --yellow: #f0b429; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 24px 16px; line-height: 1.5; }
+    .wrap { max-width: 580px; margin: 30px auto; }
+    h1 { font-size: 32px; margin: 0 0 6px; font-weight: 800; letter-spacing: -0.6px; }
+    .tag { color: var(--muted); font-size: 14px; margin-bottom: 26px; }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 24px; margin-bottom: 18px; }
+    label { display: block; color: var(--muted); font-size: 13px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    input[type=text] { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; font-size: 18px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 2px; text-transform: uppercase; }
+    input[type=email] { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 11px 14px; font-size: 14px; margin-top: 4px; }
+    input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    .row { margin-top: 14px; }
+    .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+    button.primary { width: 100%; margin-top: 18px; background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 13px; font-size: 16px; font-weight: 700; cursor: pointer; }
+    button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.unlock { background: var(--green); }
+    .steps { display: flex; flex-direction: column; gap: 10px; margin: 14px 0; }
+    .step { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
+    .step .dot { width: 18px; height: 18px; border-radius: 50%; background: var(--border); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 11px; color: var(--muted); }
+    .step.done .dot { background: var(--green); color: #fff; }
+    .step.active .dot { background: var(--accent); color: #fff; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 107, 53, 0.5); } 50% { box-shadow: 0 0 0 6px rgba(255, 107, 53, 0); } }
+    .step.error .dot { background: var(--red); color: #fff; }
+    .step.fail .dot { background: var(--yellow); color: #fff; }
+    .reveal-block { background: rgba(46, 160, 67, 0.08); border: 1px solid rgba(46, 160, 67, 0.3); border-radius: 8px; padding: 16px 18px; margin: 12px 0; }
+    .reveal-block h3 { font-size: 14px; margin: 0 0 6px; color: var(--green); }
+    .reveal-block .vehicle { font-size: 17px; font-weight: 600; color: var(--text); }
+    .pn-locked { font-size: 28px; letter-spacing: 6px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); background: var(--bg); border: 1px dashed var(--border); border-radius: 6px; padding: 14px; text-align: center; user-select: none; margin: 14px 0 6px; filter: blur(8px); }
+    .lock-note { color: var(--muted); font-size: 12px; text-align: center; margin-bottom: 14px; }
+    .price-tag { font-size: 22px; font-weight: 700; color: var(--accent); }
+    .small-strike { color: var(--muted); text-decoration: line-through; font-size: 14px; margin-left: 8px; }
+    .error-banner { background: rgba(248, 81, 73, 0.1); border: 1px solid rgba(248, 81, 73, 0.3); color: var(--red); padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; font-size: 13px; }
+    .footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 28px; }
+    .footer a { color: var(--muted); margin: 0 6px; }
+    .signin-strip { text-align: right; font-size: 13px; margin-bottom: 8px; }
+    .signin-strip a { color: var(--muted); text-decoration: none; }
+    .signin-strip a:hover { color: var(--accent); }
+    .small-print { font-size: 11px; color: var(--muted); margin-top: 12px; line-height: 1.5; }
+    .small-print a { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="signin-strip">
+      <a href="/signin">Have an account? Sign in</a>
+    </div>
+
+    <h1>Locksmith Daddy</h1>
+    <div class="tag">VIN → dealer-verified OEM key part number. No subscription. You only pay when we deliver.</div>
+
+    <div id="error-area"></div>
+
+    <!-- Step 1: VIN entry -->
+    <div class="panel" id="entry-panel">
+      <form id="vin-form" autocomplete="off">
+        <label for="vin">Vehicle VIN</label>
+        <input id="vin" name="vin" type="text" maxlength="17" placeholder="1A2BC34DEFG567890" required pattern="[A-HJ-NPR-Z0-9]{17}" title="17 alphanumeric characters; no I, O, or Q">
+        <div class="hint">17 characters. We'll decode the vehicle from NHTSA first, then check the dealer's verified catalog.</div>
+
+        <div class="row">
+          <label for="email">Email for the result (so you can close this tab)</label>
+          <input id="email" name="email" type="email" placeholder="you@yourshop.com" required>
+        </div>
+
+        <button type="submit" class="primary" id="submit-btn">Look up VIN</button>
+        <div class="small-print">
+          We charge $7.99 only when we return a dealer-verified OEM part number. If we can't verify it, you pay nothing.
+          By clicking, you agree to our <a href="/privacy">privacy policy</a> and <a href="/refund-policy">refund policy</a>.
+        </div>
+      </form>
+    </div>
+
+    <!-- Step 2+: progress -->
+    <div class="panel" id="progress-panel" style="display:none;">
+      <div class="steps">
+        <div class="step" id="step-decode"><span class="dot">1</span><span class="step-label">Decoding VIN from NHTSA…</span></div>
+        <div class="step" id="step-scrape"><span class="dot">2</span><span class="step-label">Checking dealer catalog…</span></div>
+        <div class="step" id="step-verify"><span class="dot">3</span><span class="step-label">Verifying dealer attestation…</span></div>
+      </div>
+      <div class="hint" id="elapsed-hint">This usually takes 30 seconds to 3 minutes. You can close this tab — we'll email the result when ready.</div>
+    </div>
+
+    <!-- Step 3: found, paywalled -->
+    <div class="panel" id="result-paywalled-panel" style="display:none;">
+      <div class="reveal-block">
+        <h3>✓ Dealer-Verified OEM Part Number Found</h3>
+        <div class="vehicle" id="result-vehicle"></div>
+        <div class="pn-locked">XXXXX-XXXXX</div>
+        <div class="lock-note">🔒 Part number hidden until unlocked</div>
+      </div>
+
+      <p style="margin: 0 0 6px;"><strong>Unlock for <span class="price-tag">$7.99</span></strong></p>
+      <p style="font-size: 13px; color: var(--muted); margin: 0 0 14px;">
+        Get the OEM PN + a click-through link to the dealer's own product page as proof of fitment. One-time payment, no subscription. We never charge you when we can't verify.
+      </p>
+      <button class="primary unlock" id="unlock-btn">Pay $7.99 and unlock</button>
+
+      <details style="margin-top: 14px;">
+        <summary style="color: var(--muted); font-size: 13px; cursor: pointer;">Save 38% — Get 10 lookups for $49</summary>
+        <div style="padding: 12px 0 4px;">
+          <p style="font-size: 13px; color: var(--muted); margin: 0 0 10px;">
+            For repo companies, auction houses, and busy locksmiths. <strong>$4.90 per VIN</strong> instead of $7.99. Unused credits never expire.
+          </p>
+          <button class="primary" style="background: var(--panel); border: 1px solid var(--accent); color: var(--accent);" id="unlock-bundle-btn">Unlock + buy 10-pack for $49</button>
+        </div>
+      </details>
+    </div>
+
+    <!-- Step 4: not verified, no charge -->
+    <div class="panel" id="result-unverified-panel" style="display:none;">
+      <div style="background: rgba(240, 180, 41, 0.08); border-left: 3px solid var(--yellow); padding: 14px 16px; border-radius: 6px;">
+        <h3 style="margin: 0 0 6px; color: var(--yellow); font-size: 14px;">Couldn't dealer-verify this VIN yet</h3>
+        <div class="vehicle" id="result-vehicle-unv"></div>
+        <p style="font-size: 13px; color: var(--text); margin: 10px 0 0;">
+          The dealer catalog hasn't published a verified OEM key fitment for this exact year + trim yet. <strong>You were not charged.</strong> This usually means a brand-new 2026 trim — try again in a few weeks, or use the Enterprise option for a manual research request.
+        </p>
+      </div>
+      <div style="text-align: center; margin-top: 14px;">
+        <a href="/" style="color: var(--accent); font-size: 14px;">Try another VIN</a>
+      </div>
+    </div>
+
+    <div class="footer">
+      LocksmithDaddy is a Cetabo LLC venture<br>
+      <a href="/privacy">Privacy</a>·<a href="/refund-policy">Refund</a>·<a href="/enterprise">Enterprise</a>·<a href="mailto:cetabo.contact@gmail.com">Contact</a>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      const $ = (id) => document.getElementById(id);
+      const errorArea = $('error-area');
+      let pollTimer = null;
+      let elapsedTimer = null;
+      let startedAt = null;
+      let jobId = null;
+
+      function showError(msg) {
+        errorArea.innerHTML = '<div class="error-banner">' + msg + '</div>';
+      }
+      function clearError() { errorArea.innerHTML = ''; }
+
+      function vehicleSummary(j) {
+        const parts = [j.vehicle_year, j.vehicle_make, j.vehicle_model, j.vehicle_trim].filter(x => x);
+        return parts.join(' ');
+      }
+
+      function setStep(id, state, label) {
+        const el = $(id);
+        if (!el) return;
+        el.classList.remove('done', 'active', 'error', 'fail');
+        if (state) el.classList.add(state);
+        if (label) el.querySelector('.step-label').textContent = label;
+      }
+
+      function startElapsed() {
+        startedAt = Date.now();
+        elapsedTimer = setInterval(() => {
+          const s = Math.floor((Date.now() - startedAt) / 1000);
+          $('elapsed-hint').textContent =
+            'Elapsed: ' + s + 's · This usually takes 30 seconds to 3 minutes. You can close this tab — we\'ll email the result when ready.';
+        }, 1000);
+      }
+
+      function stopTimers() {
+        if (pollTimer) clearInterval(pollTimer);
+        if (elapsedTimer) clearInterval(elapsedTimer);
+        pollTimer = null; elapsedTimer = null;
+      }
+
+      async function pollJob() {
+        try {
+          const r = await fetch('/lookup/' + jobId + '/status');
+          if (!r.ok) return;
+          const j = await r.json();
+          if (j.vehicle_year && j.vehicle_make) {
+            setStep('step-decode', 'done', 'Decoded: ' + vehicleSummary(j));
+            setStep('step-scrape', 'active', 'Checking dealer catalog…');
+          }
+          if (j.status === 'verified' && j.has_pn) {
+            stopTimers();
+            setStep('step-scrape', 'done', 'Dealer catalog: verified');
+            setStep('step-verify', 'done', 'Dealer attestation confirmed');
+            // Reveal the paywalled result panel
+            $('progress-panel').style.display = 'none';
+            $('result-vehicle').textContent = vehicleSummary(j);
+            $('result-paywalled-panel').style.display = 'block';
+            $('unlock-btn').onclick = () => {
+              window.location.href = '/buy/single?job_id=' + encodeURIComponent(jobId);
+            };
+            $('unlock-bundle-btn').onclick = () => {
+              window.location.href = '/buy/ten?job_id=' + encodeURIComponent(jobId);
+            };
+          } else if (j.status === 'unverified') {
+            stopTimers();
+            setStep('step-scrape', 'done', 'Dealer catalog reviewed');
+            setStep('step-verify', 'fail', 'No verified fitment published yet');
+            $('progress-panel').style.display = 'none';
+            $('result-vehicle-unv').textContent = vehicleSummary(j);
+            $('result-unverified-panel').style.display = 'block';
+          } else if (j.status === 'error') {
+            stopTimers();
+            setStep('step-verify', 'error', 'Error — please try again');
+            showError(j.error_message || 'A transient error occurred. You were not charged.');
+          }
+        } catch (e) { /* keep polling */ }
+      }
+
+      $('vin-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        clearError();
+        const vin = $('vin').value.trim().toUpperCase();
+        const email = $('email').value.trim();
+        if (vin.length !== 17) { showError('VIN must be 17 characters'); return; }
+        $('submit-btn').disabled = true;
+        $('submit-btn').textContent = 'Submitting…';
+        try {
+          const r = await fetch('/lookup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ vin, email }).toString(),
+          });
+          if (!r.ok) {
+            const t = await r.text();
+            showError(t || 'Could not start lookup. Please try again.');
+            $('submit-btn').disabled = false;
+            $('submit-btn').textContent = 'Look up VIN';
+            return;
+          }
+          const j = await r.json();
+          jobId = j.job_id;
+          $('entry-panel').style.display = 'none';
+          $('progress-panel').style.display = 'block';
+          setStep('step-decode', 'active', 'Decoding VIN from NHTSA…');
+          startElapsed();
+          pollTimer = setInterval(pollJob, 4000);
+          pollJob();  // first poll immediately
+        } catch (err) {
+          showError('Network error — please retry.');
+          $('submit-btn').disabled = false;
+          $('submit-btn').textContent = 'Look up VIN';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

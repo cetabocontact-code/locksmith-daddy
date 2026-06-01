@@ -76,6 +76,26 @@ def check_ip_signup_rate(ip: str) -> None:
         )
 
 
+def count_anonymous_lookups_last_hour(ip: str) -> int:
+    """Anti-abuse for the public paywall flow: count how many anonymous
+    lookup jobs this IP has started in the last hour. Caller can throttle.
+
+    Different from check_ip_signup_rate — that one tracks signups, this one
+    tracks paywall lookup creates. Both run in parallel."""
+    cutoff = (
+        datetime.now(timezone.utc) - timedelta(hours=1)
+    ).isoformat(timespec="seconds")
+    with db.get_db() as conn:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS n FROM lookup_jobs
+            WHERE source_ip = ? AND created_at >= ?
+            """,
+            (ip, cutoff),
+        ).fetchone()
+        return int(row["n"] or 0)
+
+
 def check_state_lic_not_taken(state_lic: str) -> None:
     """State lic numbers are real-world unique. Reject duplicates."""
     if not state_lic:

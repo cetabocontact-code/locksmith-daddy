@@ -167,6 +167,56 @@ def create_checkout_session(
         return None
 
 
+def create_one_time_checkout(
+    *,
+    amount_cents: int,
+    product_name: str,
+    quantity: int,
+    success_url: str,
+    cancel_url: str,
+    metadata: dict | None = None,
+    customer_email: str | None = None,
+) -> str | None:
+    """Create a Stripe Checkout session for a one-time payment using inline
+    `price_data` (no pre-created Stripe Product/Price needed).
+
+    Used by /buy/single ($7.99 unlock for a single verified VIN) and
+    /buy/ten ($49 for a 10-pack). Metadata carries the job_id so the
+    webhook can mark the job paid_at and reveal the PN.
+
+    Returns the hosted-checkout URL.
+    """
+    if not is_enabled():
+        log.info("Stripe not configured — cannot create one-time checkout")
+        return None
+    data: dict[str, Any] = {
+        "mode": "payment",
+        "line_items[0][price_data][currency]": "usd",
+        "line_items[0][price_data][unit_amount]": str(amount_cents),
+        "line_items[0][price_data][product_data][name]": product_name,
+        "line_items[0][quantity]": str(quantity),
+        "success_url": success_url,
+        "cancel_url": cancel_url,
+        "payment_intent_data[capture_method]": "automatic",
+    }
+    if customer_email:
+        data["customer_email"] = customer_email
+    if metadata:
+        for k, v in metadata.items():
+            data[f"metadata[{k}]"] = str(v)
+            # Mirror metadata onto the payment_intent so it's visible
+            # at the PI level too (some webhook handlers prefer that).
+            data[f"payment_intent_data[metadata][{k}]"] = str(v)
+    try:
+        with _client() as c:
+            resp = c.post("/checkout/sessions", data=data)
+            resp.raise_for_status()
+            return resp.json()["url"]
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Stripe create_one_time_checkout failed: %s", exc)
+        return None
+
+
 def _ensure_founder_coupon(discount_pct: int) -> str | None:
     """Get-or-create a forever-recurring coupon for founder pricing.
 

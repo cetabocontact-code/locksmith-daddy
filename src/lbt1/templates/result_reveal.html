@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow, noai, noimageai">
+  <title>Result Unlocked · Locksmith Daddy</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    :root { --bg: #0f1419; --panel: #1a2027; --border: #2a3441; --text: #e6edf3; --muted: #8b949e; --accent: #ff6b35; --green: #2ea043; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 24px 16px; line-height: 1.5; }
+    .wrap { max-width: 580px; margin: 30px auto; }
+    h1 { font-size: 26px; margin: 0 0 4px; }
+    .tag { color: var(--muted); font-size: 14px; margin-bottom: 22px; }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 24px; margin-bottom: 18px; }
+    .pn-block { background: rgba(46, 160, 67, 0.08); border: 2px solid var(--green); border-radius: 10px; padding: 22px; text-align: center; margin: 14px 0; }
+    .pn-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+    .pn-number { font-size: 36px; font-weight: 800; letter-spacing: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); margin-bottom: 8px; }
+    .copy-btn { background: var(--bg); color: var(--accent); border: 1px solid var(--accent); border-radius: 6px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .copy-btn.copied { background: var(--green); color: #fff; border-color: var(--green); }
+    .vehicle { font-size: 16px; font-weight: 600; }
+    .meta { color: var(--muted); font-size: 13px; margin-top: 6px; }
+    .alt-list { margin: 14px 0 0; padding: 0; list-style: none; }
+    .alt-list li { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; font-family: ui-monospace, monospace; font-size: 14px; }
+    a.dealer-link { display: inline-block; background: var(--accent); color: #fff; padding: 10px 16px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px; margin-top: 10px; }
+    .small-print { font-size: 12px; color: var(--muted); margin-top: 14px; line-height: 1.5; }
+    .upsell { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin-top: 18px; }
+    .upsell h3 { margin: 0 0 6px; font-size: 16px; }
+    .upsell p { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
+    .upsell .row { display: flex; gap: 10px; }
+    .upsell button { flex: 1; padding: 11px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 13px; }
+    .upsell .ten { background: var(--accent); color: #fff; border: none; }
+    .upsell .free { background: transparent; color: var(--text); border: 1px solid var(--border); }
+    .footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 28px; }
+    .footer a { color: var(--muted); margin: 0 6px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Result unlocked ✓</h1>
+    <div class="tag">Payment confirmed. Save this somewhere safe.</div>
+
+    <div class="panel">
+      <div class="vehicle">{{ vehicle_label }}</div>
+      <div class="meta">VIN: <span style="font-family: monospace;">{{ vin }}</span> · Verified {{ paid_at_display }}</div>
+
+      <div class="pn-block">
+        <div class="pn-label">Dealer-Verified OEM Part Number</div>
+        <div class="pn-number" id="pn-number">{{ primary_pn }}</div>
+        <button class="copy-btn" onclick="copyPN()">Copy to clipboard</button>
+      </div>
+
+      {{ alt_pns_html }}
+
+      <a class="dealer-link" href="{{ dealer_url }}" target="_blank" rel="noopener">
+        Open dealer's product page (proof of fitment) →
+      </a>
+
+      <div class="small-print">
+        This part number was confirmed by the dealer's own catalog page. The link above is your evidence of fitment — keep it for the customer record.
+      </div>
+    </div>
+
+    <div class="upsell">
+      <h3>Need more lookups?</h3>
+      <p>This was your first $7.99 single. Bundle the next 10 for $49 (save 38%) — unused credits never expire.</p>
+      <div class="row">
+        <button class="ten" onclick="window.location.href='/buy/ten'">Buy 10-pack ($49)</button>
+        <button class="free" onclick="window.location.href='/'">Just another single</button>
+      </div>
+    </div>
+
+    {{ create_account_html }}
+
+    <div class="footer">
+      LocksmithDaddy is a Cetabo LLC venture<br>
+      <a href="/privacy">Privacy</a>·<a href="/refund-policy">Refund</a>·<a href="/enterprise">Enterprise</a>·<a href="mailto:cetabo.contact@gmail.com">Contact</a>
+    </div>
+  </div>
+
+  <script>
+    function copyPN() {
+      const pn = document.getElementById('pn-number').textContent.trim();
+      navigator.clipboard.writeText(pn).then(() => {
+        const btn = document.querySelector('.copy-btn');
+        btn.classList.add('copied');
+        btn.textContent = 'Copied ✓';
+        setTimeout(() => {
+          btn.classList.remove('copied');
+          btn.textContent = 'Copy to clipboard';
+        }, 2000);
+      }).catch(() => {});
+    }
+  </script>
+</body>
+</html>
