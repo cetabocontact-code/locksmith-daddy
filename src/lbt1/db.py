@@ -231,6 +231,36 @@ CREATE INDEX IF NOT EXISTS idx_lookup_jobs_status ON lookup_jobs(status, created
 CREATE INDEX IF NOT EXISTS idx_lookup_jobs_expires ON lookup_jobs(expires_at);
 CREATE INDEX IF NOT EXISTS idx_lookup_jobs_stripe ON lookup_jobs(stripe_session_id);
 CREATE INDEX IF NOT EXISTS idx_lookup_jobs_user ON lookup_jobs(user_id, created_at DESC);
+
+-- Manually-confirmed VIN→PN overrides. When a user (or VA) phones the dealer
+-- and gets a confirmed PN over the phone, OR the user uses a dealer site
+-- that confirms VIN fitment (like parts.mikecalverttoyota.com's VIN-aware
+-- widget for the 2026 Crown Signia case), they can be entered here. The
+-- pipeline checks this table BEFORE running the live dealer scrape — if a
+-- match exists, the job is marked verified instantly. The evidence_note
+-- field carries the audit trail ("Confirmed by phone with Toyota of San
+-- Antonio 2026-06-01" or "User manually verified on parts.mikecalverttoyota.com").
+CREATE TABLE IF NOT EXISTS manual_pn_overrides (
+    vin TEXT PRIMARY KEY,
+    primary_pn TEXT NOT NULL,
+    dealer_url TEXT NOT NULL,
+    confidence_label TEXT NOT NULL DEFAULT 'HIGH',
+    evidence_note TEXT NOT NULL,
+    added_by TEXT,         -- email of admin/VA who entered it (NULL = system seed)
+    added_at TEXT NOT NULL
+);
+
+-- Contact form submissions from the homepage Contact modal.
+CREATE TABLE IF NOT EXISTS contact_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    message TEXT NOT NULL,
+    source_ip TEXT,
+    created_at TEXT NOT NULL,
+    responded_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_contact_messages_pending ON contact_messages(responded_at) WHERE responded_at IS NULL;
 """
 
 # Indexes that depend on user-table columns added by the migration. These run
@@ -1106,6 +1136,90 @@ def record_pending_purchase(
                 customer_email, user_id, utcnow_iso(),
             ),
         )
+
+
+def get_manual_pn_override(vin: str) -> dict | None:
+    """Return a previously-confirmed PN for this VIN, if one exists.
+    Used by the pipeline to short-circuit the live scrape when a human has
+    already confirmed the answer (phone call, manual dealer-site check, etc.).
+    """
+    vin = (vin or "").strip().upper()
+    if not vin:
+        return None
+    with get_db() as db:
+        row = db.execute(
+            """
+            SELECT vin, primary_pn, dealer_url, confidence_label,
+                   evidence_note, added_at
+            FROM manual_pn_overrides WHERE vin = ?
+            """,
+            (vin,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def add_manual_pn_override(
+    *, vin: str, primary_pn: str, dealer_url: str,
+    evidence_note: str, added_by: str | None = None,
+    confidence_label: str = "HIGH",
+) -> None:
+    """Add or replace a manually-confirmed VIN→PN mapping. Idempotent on VIN."""
+    with get_db() as db:
+        db.execute(
+            """
+            INSERT OR REPLACE INTO manual_pn_overrides(
+                vin, primary_pn, dealer_url, confidence_label,
+                evidence_note, added_by, added_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                vin.strip().upper(), primary_pn.strip(),
+                dealer_url.strip(), confidence_label,
+                evidence_note, added_by, utcnow_iso(),
+            ),
+        )
+
+
+def seed_manual_pn_overrides() -> None:
+    """Idempotent seed of manually-confirmed VIN→PN cases. Runs at startup.
+    These are real ground-truth answers we collected before launch."""
+    # 2026 Toyota Crown Signia — user manually verified on
+    # parts.mikecalverttoyota.com (their VIN-aware fitment widget said
+    # "fits your car"). Cross-validated by Key4, Royal Key Supply,
+    # Transponder Island (3 supplier sources confirm 8990H-30260 fits
+    # 2025-2026 Crown Signia). FCC ID HYQ14FGZ.
+    add_manual_pn_override(
+        vin="JTDACAAJ9T3040217",
+        primary_pn="8990H-30260",
+        dealer_url="https://parts.mikecalverttoyota.com/oem-parts/toyota-transmitter-sub-assembly-electrical-key-8990h30260",
+        confidence_label="HIGH",
+        evidence_note=(
+            "Manually verified on parts.mikecalverttoyota.com 2026-05-31 — "
+            "VIN search routed to /v-2026-toyota-crown-signia, dealer's "
+            "VIN-aware fitment widget confirmed 8990H-30260 fits this VIN. "
+            "Cross-validated by Key4, Royal Key Supply, Transponder Island "
+            "for 2025-2026 Crown Signia 4-button smart key (FCC HYQ14FGZ)."
+        ),
+        added_by=None,
+    )
+
+
+def create_contact_message(
+    *, name: str, email: str, message: str, source_ip: str | None,
+) -> int:
+    with get_db() as db:
+        cur = db.execute(
+            """
+            INSERT INTO contact_messages(
+                name, email, message, source_ip, created_at
+            ) VALUES(?, ?, ?, ?, ?)
+            """,
+            (
+                name.strip(), email.strip().lower(), message.strip(),
+                source_ip, utcnow_iso(),
+            ),
+        )
+        return int(cur.lastrowid)  # type: ignore[arg-type]
 
 
 def create_lookup_job(

@@ -41,17 +41,48 @@
     .error-banner { background: rgba(248, 81, 73, 0.1); border: 1px solid rgba(248, 81, 73, 0.3); color: var(--red); padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; font-size: 13px; }
     .footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 28px; }
     .footer a { color: var(--muted); margin: 0 6px; }
-    .signin-strip { text-align: right; font-size: 13px; margin-bottom: 8px; }
-    .signin-strip a { color: var(--muted); text-decoration: none; }
-    .signin-strip a:hover { color: var(--accent); }
+    .signin-strip { display: flex; justify-content: flex-end; align-items: center; gap: 14px; font-size: 13px; margin-bottom: 12px; position: relative; z-index: 5; }
+    .signin-strip a, .signin-strip button.linklike {
+      color: var(--accent);
+      text-decoration: none;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 12px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 13px;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .signin-strip a:hover, .signin-strip button.linklike:hover { background: var(--panel); border-color: var(--accent); }
     .small-print { font-size: 11px; color: var(--muted); margin-top: 12px; line-height: 1.5; }
     .small-print a { color: var(--muted); }
+    /* Contact modal */
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+    .modal-backdrop.open { display: flex; }
+    .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 24px; width: 100%; max-width: 480px; }
+    .modal h2 { margin: 0 0 6px; font-size: 20px; }
+    .modal .modal-sub { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+    .modal label { display: block; color: var(--muted); font-size: 12px; margin: 12px 0 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .modal label:first-of-type { margin-top: 0; }
+    .modal input, .modal textarea { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; font-size: 14px; font-family: inherit; }
+    .modal textarea { min-height: 110px; resize: vertical; }
+    .modal input:focus, .modal textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 18px; }
+    .modal-actions button { flex: 1; padding: 11px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 14px; }
+    .modal-actions .cancel { background: transparent; color: var(--text); border: 1px solid var(--border); }
+    .modal-actions .send { background: var(--accent); color: #fff; border: none; }
+    .modal-actions .send:disabled { opacity: 0.5; cursor: not-allowed; }
+    .modal .success-block { background: rgba(46, 160, 67, 0.1); border: 1px solid rgba(46, 160, 67, 0.3); color: var(--green); padding: 12px 14px; border-radius: 6px; font-size: 13px; }
+    .modal .error-block { background: rgba(248, 81, 73, 0.1); border: 1px solid rgba(248, 81, 73, 0.3); color: var(--red); padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; }
+    .footer button.linklike { background: transparent; border: none; color: var(--muted); margin: 0 6px; cursor: pointer; font-family: inherit; font-size: 12px; padding: 0; text-decoration: underline; }
+    .footer button.linklike:hover { color: var(--accent); }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="signin-strip">
-      <a href="/signin">Have an account? Sign in</a>
+      <a href="/signin" id="signin-link" rel="nofollow">Sign in</a>
     </div>
 
     <h1>Locksmith Daddy</h1>
@@ -131,7 +162,34 @@
 
     <div class="footer">
       LocksmithDaddy is a Cetabo LLC venture<br>
-      <a href="/privacy">Privacy</a>·<a href="/refund-policy">Refund</a>·<a href="/enterprise">Enterprise</a>·<a href="mailto:cetabo.contact@gmail.com">Contact</a>
+      <a href="/privacy">Privacy</a>·<a href="/refund-policy">Refund</a>·<a href="/enterprise">Enterprise</a>·<button type="button" class="linklike" id="contact-open">Contact</button>
+    </div>
+  </div>
+
+  <!-- Contact modal -->
+  <div class="modal-backdrop" id="contact-modal" role="dialog" aria-modal="true" aria-labelledby="contact-modal-title">
+    <div class="modal">
+      <h2 id="contact-modal-title">Contact us</h2>
+      <div class="modal-sub">Questions, support, custom requests — we reply within 1 business day.</div>
+      <div id="contact-error"></div>
+      <div id="contact-success" style="display:none;">
+        <div class="success-block">Thanks — your message was received. We'll get back to you at the email you provided.</div>
+        <div class="modal-actions">
+          <button class="cancel" id="contact-close-after">Close</button>
+        </div>
+      </div>
+      <form id="contact-form">
+        <label for="cf-name">Your name</label>
+        <input id="cf-name" name="name" type="text" required maxlength="100">
+        <label for="cf-email">Your email</label>
+        <input id="cf-email" name="email" type="email" required maxlength="200">
+        <label for="cf-message">How can we help?</label>
+        <textarea id="cf-message" name="message" required maxlength="5000"></textarea>
+        <div class="modal-actions">
+          <button type="button" class="cancel" id="contact-cancel">Cancel</button>
+          <button type="submit" class="send" id="contact-send">Send message</button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -214,6 +272,60 @@
           }
         } catch (e) { /* keep polling */ }
       }
+
+      // Contact modal wiring
+      const modal = $('contact-modal');
+      const openContact = (e) => {
+        if (e) e.preventDefault();
+        $('contact-error').innerHTML = '';
+        $('contact-success').style.display = 'none';
+        $('contact-form').style.display = '';
+        $('contact-send').disabled = false;
+        $('contact-send').textContent = 'Send message';
+        modal.classList.add('open');
+        setTimeout(() => $('cf-name').focus(), 50);
+      };
+      const closeContact = () => modal.classList.remove('open');
+      $('contact-open').addEventListener('click', openContact);
+      $('contact-cancel').addEventListener('click', closeContact);
+      $('contact-close-after').addEventListener('click', closeContact);
+      modal.addEventListener('click', (e) => { if (e.target === modal) closeContact(); });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal.classList.contains('open')) closeContact();
+      });
+      $('contact-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const name = $('cf-name').value.trim();
+        const email = $('cf-email').value.trim();
+        const message = $('cf-message').value.trim();
+        if (!name || !email || !message) {
+          $('contact-error').innerHTML = '<div class="error-block">Please fill in name, email, and message.</div>';
+          return;
+        }
+        $('contact-send').disabled = true;
+        $('contact-send').textContent = 'Sending…';
+        try {
+          const r = await fetch('/contact', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ name, email, message }).toString(),
+          });
+          if (r.ok) {
+            $('contact-form').style.display = 'none';
+            $('contact-success').style.display = '';
+            $('cf-message').value = '';
+          } else {
+            const j = await r.json().catch(() => ({error: 'Server error.'}));
+            $('contact-error').innerHTML = '<div class="error-block">' + (j.error || 'Could not send. Please try again.') + '</div>';
+            $('contact-send').disabled = false;
+            $('contact-send').textContent = 'Send message';
+          }
+        } catch (err) {
+          $('contact-error').innerHTML = '<div class="error-block">Network error — please retry.</div>';
+          $('contact-send').disabled = false;
+          $('contact-send').textContent = 'Send message';
+        }
+      });
 
       $('vin-form').addEventListener('submit', async (e) => {
         e.preventDefault();

@@ -48,6 +48,11 @@ async def _startup() -> None:
     purged = db.purge_expired_lookups()
     if purged:
         log.info("Startup auto-purge removed %d expired lookup rows", purged)
+    # Idempotent seed of manually-confirmed VIN→PN cases (Crown Signia, etc.)
+    try:
+        db.seed_manual_pn_overrides()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Manual PN override seed failed (non-fatal): %s", exc)
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -691,6 +696,56 @@ async def founder_counter() -> dict:
     return db.founder_status()
 
 
+@app.post("/contact")
+async def contact_submit(
+    request: Request,
+    name: str = Form(...),
+    email: str = Form(...),
+    message: str = Form(...),
+) -> JSONResponse:
+    """Contact-modal form endpoint. Saves to contact_messages + best-effort
+    emails cetabo.contact@gmail.com. Returns JSON for the modal to show
+    'Thanks, we'll get back to you' without a page reload."""
+    name = (name or "").strip()
+    email = (email or "").strip().lower()
+    message = (message or "").strip()
+    if not name or not email or not message:
+        return JSONResponse(
+            {"error": "Please fill in name, email, and message."},
+            status_code=400,
+        )
+    if "@" not in email:
+        return JSONResponse({"error": "Email looks invalid."}, status_code=400)
+    if len(message) > 5000:
+        return JSONResponse({"error": "Message too long (max 5000 chars)."}, status_code=400)
+    ip = abuse.client_ip(request)
+    try:
+        db.create_contact_message(
+            name=name, email=email, message=message, source_ip=ip,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Contact DB save failed: %s", exc)
+        return JSONResponse(
+            {"error": "Could not save your message. Email cetabo.contact@gmail.com directly."},
+            status_code=500,
+        )
+    try:
+        notifications.send(
+            "cetabo.contact@gmail.com",
+            f"[LD Contact] {name} via homepage form",
+            (
+                f"New contact-form message from the Locksmith Daddy homepage:\n\n"
+                f"Name:    {name}\n"
+                f"Email:   {email}\n\n"
+                f"Message:\n{message}\n\n"
+                f"— Locksmith Daddy automated form (source IP {ip})\n"
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Contact ops-inbox email best-effort failed: %s", exc)
+    return JSONResponse({"ok": True})
+
+
 # ─── Public paywalled VIN lookup (no signin required) ────────────────────────
 #
 # Flow (matches the user-spec click-path):
@@ -766,6 +821,7 @@ async def _run_anonymous_lookup_job(job_id: str, vin: str, email: str | None) ->
     Never raises (always finalizes the job row, even on error)."""
     from time import perf_counter
     started = perf_counter()
+    profile = None
     try:
         # Step 1: decode via NHTSA (cheap, fast) and stamp the vehicle on the
         # job so the browser sees "Decoded: 2025 Hyundai Elantra" while the
@@ -788,6 +844,28 @@ async def _run_anonymous_lookup_job(job_id: str, vin: str, email: str | None) ->
                 duration_seconds=int(perf_counter() - started),
                 error_message="Could not decode VIN with NHTSA.",
             )
+            _send_result_email(email, job_id, profile, verified=False, error=True)
+            return
+
+        # Step 1.5: check manual_pn_overrides BEFORE running live scrape.
+        # Cases where a human (user, VA, or admin) has already confirmed the
+        # answer via phone call / dealer-site VIN-aware widget short-circuit
+        # the live pipeline. Cuts ScrapFly cost to zero on known answers.
+        override = db.get_manual_pn_override(vin)
+        if override:
+            db.finish_lookup_job(
+                job_id,
+                primary_pn=override["primary_pn"],
+                alt_pns=None,
+                dealer_url=override["dealer_url"],
+                confidence_label=override.get("confidence_label") or "HIGH",
+                duration_seconds=int(perf_counter() - started),
+            )
+            log.info(
+                "Job %s short-circuited by manual override (PN=%s)",
+                job_id, override["primary_pn"],
+            )
+            _send_result_email(email, job_id, profile, verified=True)
             return
 
         # Step 2: full dealer-verification pipeline
@@ -811,24 +889,7 @@ async def _run_anonymous_lookup_job(job_id: str, vin: str, email: str | None) ->
             confidence_label=result.confidence_label,
             duration_seconds=int(perf_counter() - started),
         )
-
-        # Optional: kick off a transactional email to the captured address.
-        # Email content is a "we're done, click here" link — never the PN
-        # in plain email (so the paywall holds even via email forwarding).
-        if email and verified:
-            try:
-                ready_url = f"{config.BASE_URL.rstrip('/')}/lookup/{job_id}"
-                notifications.send(
-                    email,
-                    "Your Locksmith Daddy result is ready",
-                    f"Your VIN lookup finished and we found a dealer-verified "
-                    f"OEM part number for your {profile.year} "
-                    f"{profile.make} {profile.model}.\n\n"
-                    f"Click to unlock: {ready_url}\n\n"
-                    f"You'll only be charged ($7.99) when you click and complete checkout.",
-                )
-            except Exception as exc:  # noqa: BLE001
-                log.warning("Result-ready email best-effort failed: %s", exc)
+        _send_result_email(email, job_id, profile, verified=verified)
     except Exception as exc:  # noqa: BLE001
         log.exception("Background lookup job %s crashed", job_id)
         try:
@@ -838,8 +899,76 @@ async def _run_anonymous_lookup_job(job_id: str, vin: str, email: str | None) ->
                 duration_seconds=int(perf_counter() - started),
                 error_message="A transient error occurred. You were not charged.",
             )
+            _send_result_email(email, job_id, profile, verified=False, error=True)
         except Exception:  # noqa: BLE001
             pass
+
+
+def _send_result_email(
+    email: str | None, job_id: str, profile, *,
+    verified: bool, error: bool = False,
+) -> None:
+    """Send the result-ready email. Sends for BOTH verified and unverified
+    outcomes so the user knows the lookup finished even if no PN was found.
+    The PN is NEVER in the email — only a link to the paywalled unlock page.
+    Best-effort: SMTP outages or unconfigured email do not affect anything."""
+    if not email:
+        return
+    try:
+        base = config.BASE_URL.rstrip("/")
+        vehicle_label = ""
+        if profile is not None:
+            parts = [
+                str(profile.year) if getattr(profile, "year", None) else "",
+                getattr(profile, "make", "") or "",
+                getattr(profile, "model", "") or "",
+            ]
+            vehicle_label = " ".join(p for p in parts if p).strip()
+
+        if error:
+            subject = "Locksmith Daddy — lookup hit a snag"
+            body = (
+                f"Hi there,\n\n"
+                f"Your Locksmith Daddy lookup for "
+                f"{vehicle_label or 'your VIN'} ran into a transient error "
+                f"on our side. You were not charged.\n\n"
+                f"Please try again here: {base}/\n\n"
+                f"If it happens twice in a row, reply to this email and "
+                f"we'll resolve it manually.\n\n"
+                f"— Locksmith Daddy\n"
+                f"   a Cetabo LLC venture\n"
+            )
+        elif verified:
+            ready_url = f"{base}/lookup/{job_id}"
+            subject = "Your Locksmith Daddy result is ready"
+            body = (
+                f"Good news — we found a dealer-verified OEM part number "
+                f"for your {vehicle_label or 'VIN'}.\n\n"
+                f"Click to unlock for $7.99:\n  {ready_url}\n\n"
+                f"You only pay when you click and complete checkout. The "
+                f"unlocked page will show the part number plus a link to "
+                f"the dealer's own product page as proof of fitment.\n\n"
+                f"— Locksmith Daddy\n"
+                f"   a Cetabo LLC venture\n"
+            )
+        else:
+            subject = "Locksmith Daddy — VIN not yet verified"
+            body = (
+                f"Your lookup for {vehicle_label or 'your VIN'} finished.\n\n"
+                f"The dealer catalog hasn't published a verified OEM key "
+                f"fitment for this exact year + trim yet. You were not "
+                f"charged.\n\n"
+                f"This usually means a brand-new 2026 trim where the "
+                f"dealer's catalog data lags the vehicle release. Try "
+                f"again in a few weeks, or for high-priority research "
+                f"requests use the Enterprise option at:\n"
+                f"  {base}/enterprise\n\n"
+                f"— Locksmith Daddy\n"
+                f"   a Cetabo LLC venture\n"
+            )
+        notifications.send(email, subject, body)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Result email best-effort failed: %s", exc)
 
 
 @app.get("/lookup/{job_id}/status")
