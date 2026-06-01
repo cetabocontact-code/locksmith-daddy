@@ -1136,6 +1136,39 @@ def _require_admin(request: Request) -> dict:
     return user
 
 
+@app.get("/admin/email-status")
+async def admin_email_status(request: Request) -> dict:
+    """Snapshot of SMTP config (no secrets returned) — surfaces which env
+    vars are set, what host/port/user we'd use, and what From-header the
+    auto-resolver will pick. Hit this first when emails aren't arriving."""
+    _require_admin(request)
+    return notifications.email_diagnostic()
+
+
+@app.post("/admin/test-email")
+async def admin_test_email(request: Request, to: str = Form(...)) -> dict:
+    """Send a real test email to the given address and return the SMTP
+    diagnostic — success or the precise SMTPException text. Use this to
+    debug deliverability issues without grepping Fly logs.
+    """
+    _require_admin(request)
+    if not to or "@" not in to:
+        return {"ok": False, "error": "Provide a valid 'to' address."}
+    body = (
+        "This is a test email from Locksmith Daddy's admin diagnostic.\n\n"
+        "If you received this, SMTP delivery is working from the production "
+        "deploy.\n\nReply to confirm round-trip if needed.\n"
+    )
+    ok, diag = notifications._send_with_report(
+        to, "Locksmith Daddy — SMTP test email", body,
+    )
+    return {
+        "ok": ok,
+        "diagnostic": diag or "Email accepted by SMTP server. Check spam folder if not in inbox.",
+        "config_used": notifications.email_diagnostic(),
+    }
+
+
 @app.get("/api/admin/scrapfly-credits")
 async def admin_scrapfly_credits(request: Request) -> dict:
     """Live ScrapFly credit balance for the admin dashboard."""

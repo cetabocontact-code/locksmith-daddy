@@ -21,36 +21,134 @@ from lbt1 import config
 log = logging.getLogger(__name__)
 
 
+def _resolve_from_address() -> str:
+    """Pick a From: header that the SMTP host will actually accept.
+
+    The most common deliverability failure on shared SMTP hosts (Gmail
+    in particular) is a From-address mismatch: SMTP_USER authenticates
+    as alice@gmail.com but the message header says noreply@example.com,
+    so Gmail rejects with "Sender address rejected: not owned by user".
+
+    Rule:
+      - If EMAIL_FROM's email part matches SMTP_USER → use EMAIL_FROM as-is
+        (keeps friendly "Locksmith Daddy <…>" display name).
+      - Otherwise, if SMTP_HOST is Gmail or similar enforced relays →
+        replace the email part with SMTP_USER but preserve display name.
+      - For other relays (SendGrid, Mailgun, Resend) the original
+        EMAIL_FROM is preserved.
+    """
+    raw = config.EMAIL_FROM or ""
+    user = (config.SMTP_USER or "").strip().lower()
+    host = (config.SMTP_HOST or "").strip().lower()
+    enforced_hosts = {
+        "smtp.gmail.com", "smtp.googlemail.com",
+        "smtp.office365.com", "smtp-mail.outlook.com",
+        "smtp.mail.yahoo.com", "smtp.zoho.com",
+    }
+    if "<" in raw and ">" in raw:
+        display = raw.split("<", 1)[0].strip()
+        email_part = raw.split("<", 1)[1].rstrip(">").strip().lower()
+    else:
+        display = ""
+        email_part = raw.strip().lower()
+    if user and email_part and email_part == user:
+        return raw  # already matches authenticated user
+    if user and host in enforced_hosts:
+        display = display or "Locksmith Daddy"
+        return f"{display} <{user}>"
+    return raw
+
+
 def send(to: str, subject: str, body: str) -> bool:
     """Send a plain-text email. Returns True on success, False otherwise.
     Never raises."""
+    return _send_with_report(to, subject, body)[0]
+
+
+def _send_with_report(to: str, subject: str, body: str) -> tuple[bool, str]:
+    """Internal: returns (ok, diagnostic_msg). diagnostic_msg is empty on
+    success or carries the SMTP error / skip reason on failure. Used by
+    the test-email admin endpoint to surface SMTP issues to operators."""
     if not config.EMAIL_ENABLED:
-        log.info("Email not configured — skipping send to %s (subject=%r)", to, subject)
-        return False
+        msg = (
+            f"EMAIL_ENABLED is False. "
+            f"SMTP_HOST={config.SMTP_HOST!r}, "
+            f"SMTP_USER={'set' if config.SMTP_USER else 'EMPTY'}, "
+            f"SMTP_PASS={'set' if config.SMTP_PASS else 'EMPTY'}. "
+            f"All three must be present."
+        )
+        log.info("Email skipped: %s", msg)
+        return False, msg
 
     if not to or "@" not in to:
-        log.info("Skipping email to malformed address %r", to)
-        return False
+        return False, f"Recipient {to!r} is malformed"
 
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = config.EMAIL_FROM
-    msg["To"] = to
-    msg.set_content(body)
+    from_header = _resolve_from_address()
+    msg_obj = EmailMessage()
+    msg_obj["Subject"] = subject
+    msg_obj["From"] = from_header
+    msg_obj["To"] = to
+    msg_obj.set_content(body)
 
     try:
-        with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=10) as smtp:
+        with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=15) as smtp:
             smtp.ehlo()
             if config.SMTP_USE_TLS:
                 smtp.starttls()
                 smtp.ehlo()
             smtp.login(config.SMTP_USER, config.SMTP_PASS)
-            smtp.send_message(msg)
-        log.info("Email sent to %s (subject=%r)", to, subject)
-        return True
-    except Exception as exc:
-        log.warning("Email send failed to %s: %s", to, exc)
-        return False
+            smtp.send_message(msg_obj)
+        log.info(
+            "Email sent: to=%s subject=%r from=%s host=%s",
+            to, subject, from_header, config.SMTP_HOST,
+        )
+        return True, ""
+    except smtplib.SMTPAuthenticationError as exc:
+        diag = (
+            f"SMTP auth failed (host={config.SMTP_HOST}, "
+            f"user={config.SMTP_USER}): {exc.smtp_code} {exc.smtp_error!r}. "
+            "For Gmail: enable 2FA + generate an App Password and use that as SMTP_PASS."
+        )
+        log.warning(diag)
+        return False, diag
+    except smtplib.SMTPSenderRefused as exc:
+        diag = (
+            f"SMTP rejected the From address {from_header!r}: "
+            f"{exc.smtp_code} {exc.smtp_error!r}. "
+            "Most SMTP hosts require the From email to match SMTP_USER. "
+            "Set EMAIL_FROM to use {SMTP_USER} or use a relay that supports custom senders."
+        )
+        log.warning(diag)
+        return False, diag
+    except smtplib.SMTPRecipientsRefused as exc:
+        diag = f"SMTP rejected the recipient(s): {exc.recipients!r}"
+        log.warning(diag)
+        return False, diag
+    except smtplib.SMTPException as exc:
+        diag = f"SMTP error class={type(exc).__name__} args={exc.args!r}"
+        log.warning(diag)
+        return False, diag
+    except Exception as exc:  # noqa: BLE001
+        diag = f"Unexpected send error class={type(exc).__name__} args={exc.args!r}"
+        log.warning(diag)
+        return False, diag
+
+
+def email_diagnostic() -> dict:
+    """Snapshot of the current email config that's safe to surface to
+    operators on /admin/email-status. No secrets returned — just which
+    fields are populated and what From-header we'd use."""
+    return {
+        "enabled": config.EMAIL_ENABLED,
+        "smtp_host": config.SMTP_HOST or None,
+        "smtp_port": config.SMTP_PORT,
+        "smtp_use_tls": config.SMTP_USE_TLS,
+        "smtp_user_set": bool(config.SMTP_USER),
+        "smtp_pass_set": bool(config.SMTP_PASS),
+        "smtp_user_value": config.SMTP_USER,  # not a secret; useful for debugging
+        "email_from_configured": config.EMAIL_FROM,
+        "email_from_effective": _resolve_from_address(),
+    }
 
 
 def send_signup_welcome(*, to: str, full_name: str) -> bool:
