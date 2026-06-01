@@ -85,6 +85,14 @@ SMTP_USE_TLS = _env_bool("SMTP_USE_TLS", True)
 EMAIL_FROM = _env("EMAIL_FROM", "Locksmith Daddy <noreply@locksmithdaddy.us>")
 EMAIL_ENABLED = bool(SMTP_HOST and SMTP_USER and SMTP_PASS)
 
+# Where Contact-form messages and Enterprise leads land. Single env var so
+# the operator can swap inboxes without code changes. While the Resend
+# domain is unverified, this MUST be the address registered with Resend
+# (contact@locksmithdaddy.us); once locksmithdaddy.us is verified at
+# resend.com/domains, this can be flipped to any address (e.g.,
+# cetabo.contact@gmail.com).
+OPS_EMAIL = _env("LBT1_OPS_EMAIL", "contact@locksmithdaddy.us")
+
 # Scraping backend selection
 # Values: auto (default) | scrapingant | brightdata | local
 SCRAPE_BACKEND = _env("LBT1_SCRAPE_BACKEND", "auto")

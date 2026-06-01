@@ -672,7 +672,7 @@ async def enterprise_submit(
     except Exception as exc:  # noqa: BLE001
         log.warning("Enterprise lead capture DB failed: %s", exc)
         return RedirectResponse(
-            f"/enterprise?error={_url_quote('Could not save your request. Please email cetabo.contact@gmail.com.')}",
+            f"/enterprise?error={_url_quote('Could not save your request. Please email contact@locksmithdaddy.us.')}",
             status_code=status.HTTP_303_SEE_OTHER,
         )
     # Best-effort email to ops inbox; don't block the user response on it.
@@ -705,7 +705,7 @@ async def contact_submit(
     message: str = Form(...),
 ) -> JSONResponse:
     """Contact-modal form endpoint. Saves to contact_messages + best-effort
-    emails cetabo.contact@gmail.com. Returns JSON for the modal to show
+    emails contact@locksmithdaddy.us. Returns JSON for the modal to show
     'Thanks, we'll get back to you' without a page reload."""
     name = (name or "").strip()
     email = (email or "").strip().lower()
@@ -727,12 +727,12 @@ async def contact_submit(
     except Exception as exc:  # noqa: BLE001
         log.warning("Contact DB save failed: %s", exc)
         return JSONResponse(
-            {"error": "Could not save your message. Email cetabo.contact@gmail.com directly."},
+            {"error": "Could not save your message. Email contact@locksmithdaddy.us directly."},
             status_code=500,
         )
     try:
         notifications.send(
-            "cetabo.contact@gmail.com",
+            config.OPS_EMAIL,
             f"[LD Contact] {name} via homepage form",
             (
                 f"New contact-form message from the Locksmith Daddy homepage:\n\n"
@@ -1016,7 +1016,7 @@ async def _create_buy_session(
     if not stripe_client.is_enabled():
         return HTMLResponse(
             "<h2>Payments are not configured on this deploy.</h2>"
-            "<p>Email <a href='mailto:cetabo.contact@gmail.com'>cetabo.contact@gmail.com</a> "
+            "<p>Email <a href='mailto:contact@locksmithdaddy.us'>contact@locksmithdaddy.us</a> "
             "to unlock your result manually.</p>",
             status_code=503,
         )
@@ -1060,7 +1060,7 @@ async def _create_buy_session(
     if not checkout_url:
         return HTMLResponse(
             "Could not create checkout session. Please email "
-            "<a href='mailto:cetabo.contact@gmail.com'>cetabo.contact@gmail.com</a>.",
+            "<a href='mailto:contact@locksmithdaddy.us'>contact@locksmithdaddy.us</a>.",
             status_code=502,
         )
     return RedirectResponse(checkout_url, status_code=status.HTTP_303_SEE_OTHER)

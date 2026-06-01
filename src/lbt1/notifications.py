@@ -252,8 +252,8 @@ def send_enterprise_lead_notification(
     *, company: str, contact_name: str, contact_email: str, phone: str,
     role: str, monthly_volume: str, notes: str,
 ) -> bool:
-    """Notify the Cetabo ops inbox that an enterprise lead just submitted
-    the /enterprise contact form. Goes to cetabo.contact@gmail.com."""
+    """Notify the ops inbox (config.OPS_EMAIL) that an enterprise lead just
+    submitted the /enterprise contact form."""
     body = (
         "New enterprise / reseller lead from /enterprise:\n\n"
         f"Company:           {company}\n"
@@ -266,7 +266,7 @@ def send_enterprise_lead_notification(
         "— Locksmith Daddy automated form\n"
     )
     return send(
-        "cetabo.contact@gmail.com",
+        config.OPS_EMAIL,
         f"[LD Enterprise] New lead: {company} ({monthly_volume})",
         body,
     )
