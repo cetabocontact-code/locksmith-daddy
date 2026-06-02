@@ -95,6 +95,29 @@ _MAKE_CONFIG: dict[str, list[tuple[str, tuple[str, ...]]]] = {
         ("lexus.oempartsonline.com", ("8990H", "89070", "89904", "89742")),
         ("toyota.oempartsonline.com", ("8990H", "89070", "89904", "89742")),  # adjacent
     ],
+    # ─── Experimental makes (only queried when env-var-gated drivers
+    # for this make are enabled in pipeline._drivers_for_make). DDG
+    # fallback itself doesn't check the env var — the gate is upstream.
+    "honda": [
+        ("honda.oempartsonline.com", ("72147", "35118", "35880")),
+    ],
+    "acura": [
+        ("acura.oempartsonline.com", ("72147", "35118", "35880")),
+        ("honda.oempartsonline.com", ("72147", "35118", "35880")),  # adjacent
+    ],
+    "nissan": [
+        ("nissan.oempartsonline.com", ("285E3", "28268", "28630")),
+    ],
+    "infiniti": [
+        ("infiniti.oempartsonline.com", ("285E3", "28268", "28630")),
+        ("nissan.oempartsonline.com", ("285E3", "28268", "28630")),  # adjacent
+    ],
+    "subaru": [
+        ("subaru.oempartsonline.com", ("57497", "88835", "88036")),
+    ],
+    "mazda": [
+        ("mazda.oempartsonline.com", ("KD45", "GHP9", "GHR9", "BBM4", "BHN9")),
+    ],
 }
 
 
@@ -413,38 +436,85 @@ class DuckDuckGoSearchFallbackDriver:
     @staticmethod
     def _extract_pn(url: str, title: str, soup: BeautifulSoup) -> str:
         """Pull OEM PN from URL (last segment after final dash) or from
-        title text. Normalize to canonical format.
+        title text. Normalize to canonical Make-specific format.
 
-        Handles three Hyundai/Kia/Genesis/Toyota PN shapes:
-          - 95440-AA501 → URL has '95440aa501'   (5 digits + 5 alphanum)
-          - 89070-06791 → URL has '8907006791'   (5 digits + 5 digits)
-          - 8990H-30260 → URL has '8990h30260'   (4 digits + LETTER + 5 digits)
-        The 8990H pattern is Toyota's 2025+ smart-key family (Crown Signia,
-        GR Corolla, etc.) and would not be caught by the standard 5-digit
-        prefix regex — added 2026-05-30 after diagnosing all 8 Toyota 2026
-        luxury gaps came down to this PN-shape blind spot.
+        Handles the OEM PN shapes we've observed across makes:
+          - 95440-AA501       Hyundai/Kia/Genesis    (5d + 5alphanum)
+          - 89070-06791       Toyota (older)         (5d + 5d)
+          - 8990H-30260       Toyota (2025+)         (4d + LETTER + 5d)
+          - 72147-TBA-A11     Honda/Acura            (5d + 3char + 3char)
+          - 35118-TG7-A31     Honda/Acura            (same shape)
+          - 285E3-1LA5A       Nissan/Infiniti        (5alphanum + 5alphanum)
+          - 164-R8166         Ford/Lincoln (Rotunda) (3d + 1L + 4d)
+          - 57497AA001        Subaru                 (5alphanum + 5alphanum, no dash)
+          - KD45-67-5DY       Mazda                  (4char + 2d + 3char)
+
+        We try the most-specific shapes first to avoid greedy mismatches.
+        Title-based fallback if URL extraction fails.
         """
-        # Try the 4-digit + letter + 5-digit shape FIRST (Toyota 8990H family)
+        url_lc = url.lower()
+
+        # 1. Honda / Acura: 5-digit + 3-char + 3-char (e.g. 72147tba-a11 or 72147tbaa11)
         m = re.search(
-            r"/oem-parts/[^/]*?(\d{4}[a-z]\d{5})(?:[?#]|$)", url.lower()
+            r"/oem-parts/[^/]*?(\d{5})[\-]?([a-z0-9]{3})[\-]?([a-z0-9]{3})(?:[?#]|$)",
+            url_lc,
+        )
+        if m and m.group(1) in {"72147", "35118", "35880"}:
+            return f"{m.group(1)}-{m.group(2)}-{m.group(3)}".upper()
+
+        # 2. Ford Rotunda: 3-digit + R + 4-digit
+        m = re.search(r"/oem-parts/[^/]*?(164r\d{4})(?:[?#]|$)", url_lc)
+        if m:
+            raw = m.group(1)
+            return f"164-{raw[3:].upper()}"
+
+        # 3. Mazda 3-segment: 4-char + 2-digit + 3-char (e.g. kd45675dy)
+        m = re.search(
+            r"/oem-parts/[^/]*?([a-z]{2}\d{2})(\d{2})([a-z0-9]{3})(?:[?#]|$)",
+            url_lc,
+        )
+        if m:
+            return f"{m.group(1)}-{m.group(2)}-{m.group(3)}".upper()
+
+        # 4. Toyota 8990H: 4-digit + letter + 5-digit
+        m = re.search(
+            r"/oem-parts/[^/]*?(\d{4}[a-z]\d{5})(?:[?#]|$)", url_lc,
         )
         if m:
             raw = m.group(1)
             return f"{raw[:5]}-{raw[5:]}".upper()
-        # Standard pattern: 5 digits + 4-8 alphanumerics
+
+        # 5. Standard: 5-digit + 4-8 alphanumerics
+        # Catches: 95440AA501 (Hyundai/Kia), 8907006791 (Toyota),
+        #          57497AA001 (Subaru)
         m = re.search(
-            r"/oem-parts/[^/]*?(\d{5}[a-z0-9]{4,8})(?:[?#]|$)", url.lower()
+            r"/oem-parts/[^/]*?(\d{5}[a-z0-9]{4,8})(?:[?#]|$)", url_lc,
         )
         if m:
             raw = m.group(1)
-            # Normalize: 95440L1760 -> 95440-L1760
             if len(raw) >= 6 and raw[:5].isdigit():
                 return f"{raw[:5]}-{raw[5:]}".upper()
             return raw.upper()
-        # Try title — "95440-L1760", "8990H-30260", "95440 L1760" patterns
-        m = re.search(r"\b(\d{4}[A-Z]\d{5}|\d{5}[-\s]?[A-Z0-9]{4,8})\b", title)
+
+        # 6. Nissan/Infiniti 285E3-XXXXX: 3-digit + letter + digit + 4-5 alphanum
+        # The 285E3 prefix isn't pure-5-digit so the standard pattern misses it.
+        m = re.search(
+            r"/oem-parts/[^/]*?(\d{3}[a-z]\d)([a-z0-9]{4,6})(?:[?#]|$)", url_lc,
+        )
         if m:
-            return m.group(1).replace(" ", "-").upper()
+            return f"{m.group(1)}-{m.group(2)}".upper()
+
+        # 6. Title fallback — covers all the patterns above as printed text
+        for pat in [
+            r"\b(\d{5}-[A-Z0-9]{3}-[A-Z0-9]{3})\b",  # 72147-TBA-A11
+            r"\b(164-R\d{4})\b",                       # 164-R8166
+            r"\b([A-Z]{2}\d{2}-\d{2}-[A-Z0-9]{3})\b",  # KD45-67-5DY
+            r"\b(\d{4}[A-Z]\d{5})\b",                  # 8990H30260
+            r"\b(\d{5}[-\s]?[A-Z0-9]{4,8})\b",         # 95440-AA501
+        ]:
+            m = re.search(pat, title)
+            if m:
+                return m.group(1).replace(" ", "-").upper()
         return ""
 
     @staticmethod

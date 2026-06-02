@@ -17,6 +17,15 @@ from lbt1.scrapers.base import OempartsonlineDriver
 from lbt1.scrapers.genesis import GenesisOempartsDriver
 from lbt1.scrapers.hyundai import HyundaiOempartsDriver
 from lbt1.scrapers.hyundaioempart import HyundaiOemPartDriver
+from lbt1.scrapers.experimental_makes import (
+    AcuraOempartsDriver,
+    HondaOempartsDriver,
+    InfinitiOempartsDriver,
+    LexusOempartsDriver,
+    MazdaOempartsDriver,
+    NissanOempartsDriver,
+    SubaruOempartsDriver,
+)
 from lbt1.scrapers.kia import KiaOempartsDriver
 from lbt1.scrapers.known_pn_probe import KnownPnProbeDriver
 from lbt1.scrapers.search_fallback import DuckDuckGoSearchFallbackDriver
@@ -218,6 +227,8 @@ def _drivers_for_make(make: str) -> list[type]:
     Parts and sometimes carry trims missing from RP — but they also miss
     newest model years (2026 confirmed empty on both feeds).
     """
+    import os
+
     m = (make or "").strip().lower()
     if m == "kia":
         return [KiaOempartsDriver, KiaUsOfficialDriver,
@@ -230,6 +241,36 @@ def _drivers_for_make(make: str) -> list[type]:
                 KnownPnProbeDriver]
     if m == "toyota":
         return [ToyotaOempartsDriver, DuckDuckGoSearchFallbackDriver]
+
+    # ─── Experimental makes (off by default) ──────────────────────────────
+    # Each make is gated behind LBT1_ENABLE_<MAKE>=1. The driver classes
+    # exist as bare subclasses of OempartsonlineDriver (one line each in
+    # scrapers/experimental_makes.py), so adding/removing makes is just
+    # toggling a Fly secret — no code deploy. See docs/make_playbook.md.
+    def _on(env: str) -> bool:
+        return os.environ.get(env, "").strip() in ("1", "true", "yes")
+
+    if m == "lexus" and _on("LBT1_ENABLE_LEXUS"):
+        return [LexusOempartsDriver, ToyotaOempartsDriver,
+                DuckDuckGoSearchFallbackDriver, KnownPnProbeDriver]
+    if m == "honda" and _on("LBT1_ENABLE_HONDA"):
+        return [HondaOempartsDriver, DuckDuckGoSearchFallbackDriver,
+                KnownPnProbeDriver]
+    if m == "acura" and _on("LBT1_ENABLE_ACURA"):
+        return [AcuraOempartsDriver, HondaOempartsDriver,
+                DuckDuckGoSearchFallbackDriver, KnownPnProbeDriver]
+    if m == "nissan" and _on("LBT1_ENABLE_NISSAN"):
+        return [NissanOempartsDriver, DuckDuckGoSearchFallbackDriver,
+                KnownPnProbeDriver]
+    if m == "infiniti" and _on("LBT1_ENABLE_INFINITI"):
+        return [InfinitiOempartsDriver, NissanOempartsDriver,
+                DuckDuckGoSearchFallbackDriver, KnownPnProbeDriver]
+    if m == "subaru" and _on("LBT1_ENABLE_SUBARU"):
+        return [SubaruOempartsDriver, DuckDuckGoSearchFallbackDriver,
+                KnownPnProbeDriver]
+    if m == "mazda" and _on("LBT1_ENABLE_MAZDA"):
+        return [MazdaOempartsDriver, DuckDuckGoSearchFallbackDriver,
+                KnownPnProbeDriver]
     return []
 
 
