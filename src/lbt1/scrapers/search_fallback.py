@@ -379,16 +379,36 @@ class DuckDuckGoSearchFallbackDriver:
         #    (Revolution Parts title format: "<year(s)> <make> <model> <part>")
         fit_kind = _check_phrase(title_h1, "title")
 
-        # 2) Canonical body fitment phrase: "fit your <year(s)> <make> <model>"
+        # 2) Canonical body fitment phrases — multiple dealer phrasings.
+        # Revolution Parts uses "perfectly fit your...", but Honda PartsNow,
+        # NissanPartsDeal, SubaruPartsDeal, MazdaPartsGiant etc. each use
+        # slightly different attestation wording. Recognize all of them.
         if not fit_kind:
-            # Extract just the canonical fitment sentence and check it.
-            # Pattern: "(perfectly )?fit your <YYYY[-YYYY]> <make> <model> vehicle"
-            canonical = re.search(
-                r"fit\s+your\s+(\d{4}(?:\s*[\-–—]\s*\d{4})?)\s+"
+            # All patterns capture: (year_or_range) MAKE MODEL ...
+            attestation_patterns = [
+                # Revolution Parts standard
+                r"(?:perfectly\s+)?fit\s+your\s+(\d{4}(?:\s*[\-–—]\s*\d{4})?)\s+"
                 rf"{make_re}\s+{model_re}\s+vehicle",
-                text,
-            )
-            if canonical:
+                # "Designed to fit ..." (Honda PartsNow / Mazda PartsGiant)
+                r"designed\s+to\s+fit\s+(?:your\s+)?(\d{4}(?:\s*[\-–—]\s*\d{4})?)\s+"
+                rf"{make_re}\s+{model_re}",
+                # "Genuine OEM ... for YYYY[-YYYY] Make Model"
+                r"genuine\s+oem[^.]*?for\s+(\d{4}(?:\s*[\-–—]\s*\d{4})?)\s+"
+                rf"{make_re}\s+{model_re}",
+                # "Compatible with YYYY[-YYYY] Make Model" (NissanPartsDeal)
+                r"compatible\s+with\s+(\d{4}(?:\s*[\-–—]\s*\d{4})?)\s+"
+                rf"{make_re}\s+{model_re}",
+                # "Original Equipment Manufacturer part for YYYY Make Model"
+                r"oe(?:m)?\s+part(?:\s+number)?\s+for\s+(\d{4}(?:\s*[\-–—]\s*\d{4})?)\s+"
+                rf"{make_re}\s+{model_re}",
+                # "Replacement [name] for YYYY[-YYYY] Make Model"
+                r"replacement\s+\w+(?:\s+\w+){0,3}\s+for\s+(\d{4}(?:\s*[\-–—]\s*\d{4})?)\s+"
+                rf"{make_re}\s+{model_re}",
+            ]
+            for pat in attestation_patterns:
+                canonical = re.search(pat, text)
+                if not canonical:
+                    continue
                 year_token = canonical.group(1)
                 rng_m = re.match(r"(\d{4})\s*[\-–—]\s*(\d{4})", year_token)
                 if rng_m:
@@ -398,11 +418,13 @@ class DuckDuckGoSearchFallbackDriver:
                             f"canonical fitment: '{year_token} {make_lc} "
                             f"{model_lc}' covering {year}"
                         )
+                        break
                 elif year_token.strip() == year:
                     fit_kind = (
                         f"canonical fitment: '{year_token} {make_lc} "
                         f"{model_lc}'"
                     )
+                    break
 
         if not fit_kind:
             await self._emit(

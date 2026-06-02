@@ -320,12 +320,26 @@ class KnownPnProbeDriver:
 
         fit_kind = _check_title(title_h1)
         if not fit_kind:
-            canonical = re.search(
-                r"fit\s+your\s+(\d{4}(?:\s*[\-–—]\s*\d{4})?)\s+"
+            # Mirror the multi-phrasing canonical fitment patterns from
+            # search_fallback.py so both verifiers stay consistent.
+            patterns = [
+                r"(?:perfectly\s+)?fit\s+your\s+(\d{4}(?:\s*[\-–—]\s*\d{4})?)\s+"
                 rf"{make_re}\s+{model_re}\s+vehicle",
-                body_text,
-            )
-            if canonical:
+                r"designed\s+to\s+fit\s+(?:your\s+)?(\d{4}(?:\s*[\-–—]\s*\d{4})?)\s+"
+                rf"{make_re}\s+{model_re}",
+                r"genuine\s+oem[^.]*?for\s+(\d{4}(?:\s*[\-–—]\s*\d{4})?)\s+"
+                rf"{make_re}\s+{model_re}",
+                r"compatible\s+with\s+(\d{4}(?:\s*[\-–—]\s*\d{4})?)\s+"
+                rf"{make_re}\s+{model_re}",
+                r"oe(?:m)?\s+part(?:\s+number)?\s+for\s+(\d{4}(?:\s*[\-–—]\s*\d{4})?)\s+"
+                rf"{make_re}\s+{model_re}",
+                r"replacement\s+\w+(?:\s+\w+){0,3}\s+for\s+(\d{4}(?:\s*[\-–—]\s*\d{4})?)\s+"
+                rf"{make_re}\s+{model_re}",
+            ]
+            for pat in patterns:
+                canonical = re.search(pat, body_text)
+                if not canonical:
+                    continue
                 year_token = canonical.group(1)
                 rng_m = re.match(r"(\d{4})\s*[\-–—]\s*(\d{4})", year_token)
                 if rng_m:
@@ -335,11 +349,13 @@ class KnownPnProbeDriver:
                             f"canonical fitment: '{year_token} {make_lc} "
                             f"{model_lc}' covering {year}"
                         )
+                        break
                 elif year_token.strip() == year:
                     fit_kind = (
                         f"canonical fitment: '{year_token} {make_lc} "
                         f"{model_lc}'"
                     )
+                    break
 
         if not fit_kind:
             await self._emit(

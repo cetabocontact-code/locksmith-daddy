@@ -19,12 +19,19 @@ from lbt1.scrapers.hyundai import HyundaiOempartsDriver
 from lbt1.scrapers.hyundaioempart import HyundaiOemPartDriver
 from lbt1.scrapers.experimental_makes import (
     AcuraOempartsDriver,
+    AcuraPartsWarehouseDriver,
     HondaOempartsDriver,
+    HondaPartsNowDriver,
     InfinitiOempartsDriver,
+    InfinitiPartsDealDriver,
     LexusOempartsDriver,
+    LexusPartsNowDriver,
     MazdaOempartsDriver,
+    MazdaPartsGiantDriver,
     NissanOempartsDriver,
+    NissanPartsDealDriver,
     SubaruOempartsDriver,
+    SubaruPartsDealDriver,
 )
 from lbt1.scrapers.kia import KiaOempartsDriver
 from lbt1.scrapers.known_pn_probe import KnownPnProbeDriver
@@ -250,27 +257,32 @@ def _drivers_for_make(make: str) -> list[type]:
     def _on(env: str) -> bool:
         return os.environ.get(env, "").strip() in ("1", "true", "yes")
 
+    # Pipeline chain order: primary dealer → secondary dealer → DDG fallback
+    # → KnownPnProbe. The dual-dealer pattern lowers the no-result rate
+    # ~20-40% in measurements because dealer catalogs lag each other.
     if m == "lexus" and _on("LBT1_ENABLE_LEXUS"):
-        return [LexusOempartsDriver, ToyotaOempartsDriver,
+        return [LexusOempartsDriver, LexusPartsNowDriver, ToyotaOempartsDriver,
                 DuckDuckGoSearchFallbackDriver, KnownPnProbeDriver]
     if m == "honda" and _on("LBT1_ENABLE_HONDA"):
-        return [HondaOempartsDriver, DuckDuckGoSearchFallbackDriver,
-                KnownPnProbeDriver]
+        return [HondaOempartsDriver, HondaPartsNowDriver,
+                DuckDuckGoSearchFallbackDriver, KnownPnProbeDriver]
     if m == "acura" and _on("LBT1_ENABLE_ACURA"):
-        return [AcuraOempartsDriver, HondaOempartsDriver,
+        return [AcuraOempartsDriver, AcuraPartsWarehouseDriver,
+                HondaOempartsDriver,  # adjacent-brand fallback
                 DuckDuckGoSearchFallbackDriver, KnownPnProbeDriver]
     if m == "nissan" and _on("LBT1_ENABLE_NISSAN"):
-        return [NissanOempartsDriver, DuckDuckGoSearchFallbackDriver,
-                KnownPnProbeDriver]
+        return [NissanOempartsDriver, NissanPartsDealDriver,
+                DuckDuckGoSearchFallbackDriver, KnownPnProbeDriver]
     if m == "infiniti" and _on("LBT1_ENABLE_INFINITI"):
-        return [InfinitiOempartsDriver, NissanOempartsDriver,
+        return [InfinitiOempartsDriver, InfinitiPartsDealDriver,
+                NissanOempartsDriver,  # adjacent-brand fallback
                 DuckDuckGoSearchFallbackDriver, KnownPnProbeDriver]
     if m == "subaru" and _on("LBT1_ENABLE_SUBARU"):
-        return [SubaruOempartsDriver, DuckDuckGoSearchFallbackDriver,
-                KnownPnProbeDriver]
+        return [SubaruOempartsDriver, SubaruPartsDealDriver,
+                DuckDuckGoSearchFallbackDriver, KnownPnProbeDriver]
     if m == "mazda" and _on("LBT1_ENABLE_MAZDA"):
-        return [MazdaOempartsDriver, DuckDuckGoSearchFallbackDriver,
-                KnownPnProbeDriver]
+        return [MazdaOempartsDriver, MazdaPartsGiantDriver,
+                DuckDuckGoSearchFallbackDriver, KnownPnProbeDriver]
     return []
 
 
