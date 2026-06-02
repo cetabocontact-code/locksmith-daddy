@@ -1181,6 +1181,34 @@ def _require_admin(request: Request) -> dict:
     return user
 
 
+@app.get("/admin/stripe-status")
+async def admin_stripe_status(request: Request) -> dict:
+    """End-to-end Stripe wiring check. Returns: secret key validity,
+    livemode flag, whether the webhook secret is set, and what would
+    happen if /buy/single were called right now. Hit this immediately
+    after pasting your Stripe secrets to confirm the wiring."""
+    _require_admin(request)
+    info = stripe_client.account_info()
+    return {
+        "stripe_secret_key_set": bool(config.STRIPE_SECRET_KEY),
+        "stripe_secret_key_prefix": (config.STRIPE_SECRET_KEY[:8] + "…") if config.STRIPE_SECRET_KEY else None,
+        "stripe_publishable_key_set": bool(config.STRIPE_PUBLISHABLE_KEY),
+        "stripe_publishable_key_prefix": (config.STRIPE_PUBLISHABLE_KEY[:8] + "…") if config.STRIPE_PUBLISHABLE_KEY else None,
+        "stripe_webhook_secret_set": bool(config.STRIPE_WEBHOOK_SECRET),
+        "is_enabled": stripe_client.is_enabled(),
+        "account_info": info,
+        "live_mode": (info or {}).get("livemode") if info else None,
+        "charges_enabled": (info or {}).get("charges_enabled") if info else None,
+        "payouts_enabled": (info or {}).get("payouts_enabled") if info else None,
+        "details_submitted": (info or {}).get("details_submitted") if info else None,
+        "ready_to_take_money": bool(
+            stripe_client.is_enabled()
+            and info and info.get("charges_enabled")
+            and config.STRIPE_WEBHOOK_SECRET
+        ),
+    }
+
+
 @app.get("/admin/email-status")
 async def admin_email_status(request: Request) -> dict:
     """Snapshot of SMTP config (no secrets returned) — surfaces which env

@@ -249,6 +249,33 @@ def _ensure_founder_coupon(discount_pct: int) -> str | None:
         return None
 
 
+def account_info() -> dict | None:
+    """Hit /v1/account and return a redacted snapshot — confirms the
+    Stripe secret key is valid + tells operator which mode + currency
+    they're in. Used by /admin/stripe-status."""
+    if not is_enabled():
+        return None
+    try:
+        with _client() as c:
+            resp = c.get("/account")
+            if resp.status_code != 200:
+                return {"error": f"Stripe rejected secret key: {resp.status_code} {resp.text[:120]}"}
+            j = resp.json()
+            return {
+                "id": j.get("id"),
+                "country": j.get("country"),
+                "default_currency": j.get("default_currency"),
+                "email": j.get("email"),
+                "business_profile_name": (j.get("business_profile") or {}).get("name"),
+                "charges_enabled": j.get("charges_enabled"),
+                "payouts_enabled": j.get("payouts_enabled"),
+                "details_submitted": j.get("details_submitted"),
+                "livemode": j.get("livemode"),  # True = real money mode
+            }
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Stripe call failed: {exc}"}
+
+
 def verify_webhook_signature(payload: bytes, sig_header: str, secret: str) -> dict | None:
     """Manually verify Stripe webhook signature using HMAC-SHA256.
 
