@@ -1375,6 +1375,115 @@ def _require_admin(request: Request) -> dict:
     return user
 
 
+@app.get("/admin/lookup", response_class=HTMLResponse)
+async def admin_lookup(request: Request, vin: str = "") -> HTMLResponse:
+    """Free unlimited VIN test tool for admin/dev use.
+
+    Runs the same strict pipeline as the public paywall flow, but:
+      - No paywall (full result rendered inline, including the PN)
+      - No Stripe call
+      - No lookup_jobs row written → doesn't pollute customer-facing
+        coverage stats / `/me` history
+      - No result-ready email
+      - No ScrapFly throttling protections beyond default backend behavior
+
+    Built for "test 1 VIN per make while validating the multi-make
+    expansion" — paste a VIN, see what the pipeline returns in 30s-3min.
+    """
+    _require_admin(request)
+    vin_clean = (vin or "").strip().upper()
+
+    if not vin_clean:
+        return _render("admin_lookup.html", vin="", result_html="")
+
+    # Basic VIN shape check
+    import re as _re
+    if not _re.match(r"^[A-HJ-NPR-Z0-9]{17}$", vin_clean):
+        err = (
+            "<div class='panel'><div class='kv'><div class='k'>Error</div>"
+            "<div class='v' style='color:#f85149;'>VIN must be 17 alphanumeric characters (no I, O, or Q).</div></div></div>"
+        )
+        return _render("admin_lookup.html", vin=vin_clean, result_html=err)
+
+    # Run the live pipeline directly — no DB row, no Stripe.
+    from time import perf_counter
+    started = perf_counter()
+    try:
+        result = await pipeline.lookup(vin_clean)
+    except Exception as exc:  # noqa: BLE001
+        elapsed = int(perf_counter() - started)
+        log.exception("admin_lookup pipeline crash for %s", vin_clean)
+        err = (
+            f"<div class='panel result'><h2>Pipeline crashed</h2>"
+            f"<div class='kv'>"
+            f"<div class='k'>VIN</div><div class='v'>{vin_clean}</div>"
+            f"<div class='k'>Error</div><div class='v' style='color:#f85149;'>{type(exc).__name__}: {exc}</div>"
+            f"<div class='k'>Elapsed</div><div class='v'>{elapsed}s</div>"
+            f"</div></div>"
+        )
+        return _render("admin_lookup.html", vin=vin_clean, result_html=err)
+    elapsed = int(perf_counter() - started)
+
+    profile = result.vehicle_profile
+    verified = result.dealer_verification_status == "DEALER_VERIFIED_BY_VIN"
+    status_class = "verified" if verified else "unverified"
+    status_text = "DEALER_VERIFIED_BY_VIN" if verified else "NOT_DEALER_VERIFIED_BY_VIN"
+
+    pn_block = ""
+    if result.primary_result:
+        primary_pn = result.primary_result.oem_part_number
+        dealer_url = result.primary_result.source_url or "#"
+        alts = [
+            p.oem_part_number for p in (result.alternative_matches or [])
+            if p.oem_part_number and p.oem_part_number != primary_pn
+        ]
+        alts_html = ""
+        if alts:
+            alts_html = (
+                "<div class='kv'><div class='k'>Alternate PNs</div>"
+                f"<div class='v'>{', '.join(alts)}</div></div>"
+            )
+        pn_block = (
+            f"<div class='pn-big'>{primary_pn}</div>"
+            f"<a class='dealer-link' href='{dealer_url}' target='_blank' rel='noopener'>"
+            "Open dealer's product page (proof of fitment) →</a>"
+            + alts_html
+        )
+
+    # Render research steps for debugging
+    steps_text = "\n".join(
+        f"[{s.status}] {s.step}" + (f" — {s.detail}" if s.detail else "")
+        for s in (result.research_steps or [])
+    )
+    if not steps_text:
+        steps_text = "(no research steps recorded — diagnostics may not be enabled)"
+
+    # Build vehicle label
+    vehicle_label = " ".join(
+        str(x) for x in [profile.year, profile.make, profile.model, profile.trim] if x
+    ).strip() or "(NHTSA decode failed)"
+
+    result_html = (
+        "<div class='panel result'>"
+        f"<h2>{vehicle_label}</h2>"
+        f"<span class='status-pill {status_class}'>{status_text}</span>"
+        f"<div style='margin-top:12px;'>{pn_block}</div>"
+        "<div class='kv' style='margin-top:14px;'>"
+        f"<div class='k'>VIN</div><div class='v'>{vin_clean}</div>"
+        f"<div class='k'>Year / Make / Model</div><div class='v'>{profile.year} / {profile.make} / {profile.model}</div>"
+        f"<div class='k'>Trim</div><div class='v'>{profile.trim or '—'}</div>"
+        f"<div class='k'>Engine</div><div class='v'>{profile.engine_model or '—'} / {profile.displacement_l}L / {profile.fuel_type or '—'}</div>"
+        f"<div class='k'>Body class</div><div class='v'>{profile.body_class or '—'}</div>"
+        f"<div class='k'>Confidence</div><div class='v'>{result.confidence_label} ({result.confidence_score})</div>"
+        f"<div class='k'>Elapsed</div><div class='v'>{elapsed}s</div>"
+        "</div>"
+        "<h2 style='margin-top:18px;'>Research steps (driver trace)</h2>"
+        f"<pre class='steps'>{steps_text}</pre>"
+        "</div>"
+    )
+    return _render("admin_lookup.html", vin=vin_clean, result_html=result_html)
+
+
 @app.get("/admin/stripe-status")
 async def admin_stripe_status(request: Request) -> dict:
     """End-to-end Stripe wiring check. Returns: secret key validity,

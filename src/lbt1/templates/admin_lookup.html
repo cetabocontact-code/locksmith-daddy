@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow, noai, noimageai">
+  <title>Admin · VIN test tool</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    :root { --bg: #0f1419; --panel: #1a2027; --border: #2a3441; --text: #e6edf3; --muted: #8b949e; --accent: #ff6b35; --green: #2ea043; --red: #f85149; --yellow: #f0b429; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 24px 16px; line-height: 1.5; }
+    .wrap { max-width: 880px; margin: 30px auto; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+    h1 { font-size: 22px; margin: 0; }
+    .badge { background: var(--accent); color: #fff; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 13px; margin-left: 12px; }
+    .nav-links a:hover { color: var(--accent); }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+    label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    input[type=text] { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; font-size: 17px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 1.5px; text-transform: uppercase; }
+    input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    button.run { width: 100%; margin-top: 14px; background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 12px; font-size: 15px; font-weight: 700; cursor: pointer; }
+    button.run:disabled { opacity: 0.5; cursor: wait; }
+    .quick-vins { font-size: 12px; color: var(--muted); margin-top: 10px; }
+    .quick-vins a { color: var(--accent); text-decoration: none; margin-right: 10px; font-family: ui-monospace, monospace; }
+    .quick-vins a:hover { text-decoration: underline; }
+    .result h2 { font-size: 15px; margin: 0 0 12px; }
+    .kv { display: grid; grid-template-columns: 180px 1fr; gap: 6px 16px; font-size: 13px; }
+    .kv .k { color: var(--muted); }
+    .kv .v { word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .status-pill { display: inline-block; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 700; }
+    .status-pill.verified { background: rgba(46, 160, 67, 0.15); color: var(--green); }
+    .status-pill.unverified { background: rgba(240, 180, 41, 0.15); color: var(--yellow); }
+    .status-pill.error { background: rgba(248, 81, 73, 0.15); color: var(--red); }
+    .pn-big { font-size: 28px; font-weight: 800; letter-spacing: 3px; color: var(--green); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin: 8px 0; }
+    a.dealer-link { display: inline-block; background: var(--accent); color: #fff; padding: 8px 14px; border-radius: 5px; text-decoration: none; font-weight: 600; font-size: 12px; margin-top: 8px; }
+    pre.steps { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px; font-size: 11px; color: var(--muted); max-height: 320px; overflow-y: auto; margin: 0; white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .footer { text-align: center; color: var(--muted); font-size: 11px; margin-top: 24px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <h1>VIN test tool <span class="badge">admin</span></h1>
+      <div class="nav-links">
+        <a href="/admin">Admin dashboard</a>
+        <a href="/admin/stripe-status">Stripe status</a>
+        <a href="/admin/email-status">Email status</a>
+        <a href="/me">My dashboard</a>
+      </div>
+    </div>
+
+    <div class="panel">
+      <form method="get" action="/admin/lookup">
+        <label for="vin">VIN (17 characters)</label>
+        <input id="vin" name="vin" type="text" maxlength="17" placeholder="JTDACAAJ9T3040217" pattern="[A-HJ-NPR-Z0-9]{17}" value="{{ vin }}" autofocus required>
+        <button type="submit" class="run">Run lookup (no paywall, no charge)</button>
+        <div class="quick-vins">
+          Quick test:
+          <a href="?vin=KMHLN4DJ7RU106374">2024 Hyundai Elantra</a>
+          <a href="?vin=5NMP24GL5SH097926">2025 Hyundai Santa Fe</a>
+          <a href="?vin=KNDRJDJH2S5322595">2025 Kia Sorento</a>
+          <a href="?vin=JTDACAAJ9T3040217">2026 Toyota Crown Signia</a>
+        </div>
+      </form>
+    </div>
+
+    {{ result_html }}
+
+    <div class="footer">
+      Free unlimited use. Same pipeline as the public paywall, but bypasses Stripe + email + DB lookup_jobs persistence.<br>
+      ScrapFly cost per run is borne by the admin's ScrapFly account.
+    </div>
+  </div>
+</body>
+</html>
