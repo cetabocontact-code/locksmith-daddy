@@ -1068,13 +1068,58 @@ async def _create_buy_session(
 
 @app.get("/result/{job_id}", response_class=HTMLResponse)
 async def public_result(job_id: str, paid: int = 0) -> HTMLResponse:
-    """Reveal page. Only renders the PN if paid_at is set on the job."""
+    """Reveal page. Only renders the PN if paid_at is set on the job.
+
+    Webhook-race handling: when the user comes back from Stripe's
+    success_url with ?paid=1, the Stripe redirect can arrive a second
+    or two before the webhook fires `mark_job_paid`. Rather than showing
+    the user a confusing "Payment required" page, render a polling
+    "Verifying payment…" stub that auto-refreshes once paid_at is set.
+    """
     result = db.get_lookup_job_paid_result(job_id)
     if not result:
-        # Either job doesn't exist or it's unpaid. Surface a clear message.
         job = db.get_lookup_job_public(job_id)
         if not job:
             return _render("home_public.html")
+        # The Stripe success-url race: redirect arrived before webhook.
+        # Show a 2-second-polling "Verifying payment…" stub.
+        if paid == 1 and job.get("status") == "verified" and not job.get("paid"):
+            poll_html = (
+                "<!doctype html><html><head>"
+                "<meta charset='utf-8'><title>Verifying payment…</title>"
+                "<meta name='robots' content='noindex, nofollow, noai, noimageai'>"
+                "<style>"
+                ":root{--bg:#0f1419;--text:#e6edf3;--muted:#8b949e;--accent:#ff6b35;}"
+                "body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);"
+                "margin:0;padding:60px 20px;text-align:center;}"
+                ".s{width:48px;height:48px;border-radius:50%;border:3px solid #2a3441;"
+                "border-top-color:var(--accent);animation:spin 0.9s linear infinite;"
+                "margin:0 auto 20px;}"
+                "@keyframes spin{to{transform:rotate(360deg);}}"
+                "h2{font-size:20px;margin:0 0 8px;}"
+                "p{color:var(--muted);font-size:14px;max-width:380px;margin:0 auto;}"
+                "</style></head><body>"
+                "<div class='s'></div>"
+                "<h2>Verifying your payment…</h2>"
+                "<p>Stripe is confirming the charge. This page will refresh "
+                "automatically in a moment to show your part number.</p>"
+                "<script>"
+                "let n=0;"
+                "const id=setInterval(async()=>{n++;"
+                "try{const r=await fetch('/lookup/" + job_id + "/status');"
+                "if(r.ok){const j=await r.json();"
+                "if(j.paid){clearInterval(id);window.location.reload();}}}"
+                "catch(e){}"
+                "if(n>20){clearInterval(id);"
+                "document.querySelector('p').innerHTML="
+                "'Webhook is taking longer than expected. "
+                "Please <a style=\"color:#ff6b35;\" href=\"/result/" + job_id + "\">refresh</a> "
+                "or email <a style=\"color:#ff6b35;\" href=\"mailto:contact@locksmithdaddy.us\">"
+                "contact@locksmithdaddy.us</a> with your Stripe receipt.';}"
+                "},1500);"
+                "</script></body></html>"
+            )
+            return HTMLResponse(poll_html)
         if job.get("status") == "verified" and not job.get("paid"):
             return HTMLResponse(
                 "<!doctype html><html><body style='font-family: system-ui; max-width: 540px; "

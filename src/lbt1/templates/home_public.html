@@ -387,6 +387,31 @@
         }
       });
 
+      // RESUME-FROM-EMAIL: if the server injected a job id (the user
+      // clicked a "result-ready" link from their inbox), skip the VIN
+      // entry form and jump straight to the job's current state.
+      function resumeJob(resumeId) {
+        jobId = resumeId;
+        $('entry-panel').style.display = 'none';
+        $('progress-panel').style.display = 'block';
+        // Show a "welcome back" hint above the steps so the user knows
+        // they're seeing the result for the VIN they previously submitted.
+        const hint = $('elapsed-hint');
+        if (hint) {
+          hint.textContent =
+            'Welcome back — picking up your previous VIN lookup. ' +
+            'Loading current status…';
+        }
+        setStep('step-decode', 'active', 'Loading vehicle details…');
+        startElapsed();
+        pollTimer = setInterval(pollJob, 4000);
+        pollJob();  // first poll immediately so result-already-ready jobs
+                    // surface the paywall panel within ~1 second
+      }
+      if (window.__LBT1_RESUME_JOB_ID__) {
+        resumeJob(window.__LBT1_RESUME_JOB_ID__);
+      }
+
       $('vin-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         clearError();
