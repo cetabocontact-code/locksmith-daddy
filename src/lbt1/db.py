@@ -1352,6 +1352,43 @@ def finish_lookup_job(
         )
 
 
+def relock_jobs_by_payment_intent(payment_intent_id: str) -> int:
+    """Reverse a paywall unlock when a charge is refunded or disputed.
+
+    Stripe sends us the PaymentIntent id on `charge.refunded` /
+    `charge.dispute.created`. We stored the Checkout Session id on the
+    job, not the PaymentIntent — so we have to look up which Session(s)
+    matched this PaymentIntent via the credit_purchases table, then
+    NULL-out paid_at on the jobs whose stripe_session_id matches.
+
+    Returns count of jobs relocked.
+    """
+    if not payment_intent_id:
+        return 0
+    with get_db() as db:
+        rows = db.execute(
+            """
+            SELECT stripe_session_id FROM credit_purchases
+            WHERE stripe_payment_intent = ?
+            """,
+            (payment_intent_id,),
+        ).fetchall()
+        session_ids = [r["stripe_session_id"] for r in rows if r["stripe_session_id"]]
+        if not session_ids:
+            return 0
+        placeholders = ",".join("?" * len(session_ids))
+        cur = db.execute(
+            f"""
+            UPDATE lookup_jobs
+            SET paid_at = NULL
+            WHERE stripe_session_id IN ({placeholders})
+              AND paid_at IS NOT NULL
+            """,
+            session_ids,
+        )
+        return cur.rowcount or 0
+
+
 def mark_job_paid(job_id: str, stripe_session_id: str) -> bool:
     """Set paid_at + stripe_session_id atomically. Returns True if newly paid,
     False if already paid (idempotent for webhook retries)."""

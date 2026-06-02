@@ -198,6 +198,15 @@ def create_one_time_checkout(
         "success_url": success_url,
         "cancel_url": cancel_url,
         "payment_intent_data[capture_method]": "automatic",
+        # Restrict to cards only for V1 so we never have to deal with
+        # async-settle methods (ACH, Klarna, Afterpay, SEPA) that fire
+        # `checkout.session.async_payment_succeeded` instead of (or in
+        # addition to) `.completed` with payment_status="unpaid". Cards
+        # are synchronous: the webhook fires once, money is here, we
+        # unlock. To add more methods later, remove this line AND make
+        # sure /webhook/stripe is subscribed to async_payment_succeeded
+        # in the Stripe dashboard.
+        "payment_method_types[0]": "card",
     }
     if customer_email:
         data["customer_email"] = customer_email

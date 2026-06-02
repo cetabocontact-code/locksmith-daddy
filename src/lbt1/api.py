@@ -404,32 +404,63 @@ async def subscribe_success(request: Request) -> HTMLResponse:
 
 @app.post("/webhook/stripe")
 async def stripe_webhook(request: Request) -> dict:
-    """Listen for checkout.session.completed and subscription.* events.
+    """Listen for Stripe Checkout completion + subscription lifecycle events.
 
     Stripe POSTs here when a payment succeeds or a subscription changes status.
+
+    SECURITY: fail-CLOSED if STRIPE_WEBHOOK_SECRET is unset. Previously the
+    handler accepted any unsigned POST when the secret was missing — that
+    let an attacker forge `checkout.session.completed` with a guessed
+    job_id and unlock the paywalled PN for free. Hard-rejecting unsigned
+    requests in production removes that attack surface.
     """
     if not config.STRIPE_WEBHOOK_SECRET:
-        # If not configured yet, accept all (insecure, but safe for testing).
-        # In production this MUST be set.
-        body = await request.body()
-        import json as _json
-        try:
-            event = _json.loads(body)
-        except Exception:
-            return {"received": False}
-    else:
-        body = await request.body()
-        sig = request.headers.get("stripe-signature", "")
-        event = stripe_client.verify_webhook_signature(
-            body, sig, config.STRIPE_WEBHOOK_SECRET
+        log.warning(
+            "Stripe webhook hit but STRIPE_WEBHOOK_SECRET is unset — "
+            "rejecting 503. Set the secret on Fly to enable webhook "
+            "processing."
         )
-        if event is None:
-            return {"received": False, "error": "invalid signature"}
+        return JSONResponse(
+            {"received": False, "error": "webhook secret not configured"},
+            status_code=503,
+        )
+
+    body = await request.body()
+    sig = request.headers.get("stripe-signature", "")
+    event = stripe_client.verify_webhook_signature(
+        body, sig, config.STRIPE_WEBHOOK_SECRET
+    )
+    if event is None:
+        return JSONResponse(
+            {"received": False, "error": "invalid signature"},
+            status_code=400,
+        )
 
     event_type = event.get("type", "")
     obj = (event.get("data") or {}).get("object") or {}
 
-    if event_type == "checkout.session.completed":
+    # Treat completed and async_payment_succeeded identically — both signal
+    # "money has actually arrived." `checkout.session.completed` fires for
+    # cards (synchronous). `checkout.session.async_payment_succeeded` fires
+    # for delayed-settle methods (ACH, Klarna, Afterpay, SEPA). Today we
+    # restrict Checkout to cards, but covering both means enabling other
+    # methods later doesn't silently break fulfillment.
+    if event_type in (
+        "checkout.session.completed",
+        "checkout.session.async_payment_succeeded",
+    ):
+        # Guard against the edge case where checkout.session.completed
+        # fires for an async method with payment_status='unpaid' (the
+        # session is "complete" but the money hasn't cleared yet).
+        # Only act when Stripe says the money is actually here.
+        payment_status = obj.get("payment_status") or ""
+        if payment_status and payment_status not in ("paid", "no_payment_required"):
+            log.info(
+                "Stripe webhook: %s with payment_status=%s — waiting for clearance",
+                event_type, payment_status,
+            )
+            return {"received": True, "deferred": True}
+
         # Handle anonymous one-time pack purchases (job_id metadata present)
         meta = obj.get("metadata") or {}
         job_id = meta.get("job_id")
@@ -485,8 +516,10 @@ async def stripe_webhook(request: Request) -> dict:
             except (ValueError, Exception) as exc:
                 log.warning("Failed to promote user to Pro: %s", exc)
 
-    elif event_type in ("customer.subscription.deleted", "customer.subscription.canceled"):
-        # Subscription ended — drop user back to trial-expired state
+    elif event_type == "customer.subscription.deleted":
+        # Subscription ended — drop user back to trial-expired state.
+        # (Note: there is no `customer.subscription.canceled` event in the
+        # Stripe API — the only end-of-life event is `.deleted`.)
         meta_user_id = (obj.get("metadata") or {}).get("user_id")
         if meta_user_id:
             try:
@@ -494,6 +527,37 @@ async def stripe_webhook(request: Request) -> dict:
                 log.info("Demoted user %s to trial on subscription end", meta_user_id)
             except Exception as exc:
                 log.warning("Failed to demote user on sub end: %s", exc)
+
+    elif event_type == "charge.refunded":
+        # If a charge is fully refunded (manually from Stripe dashboard or
+        # via a dispute), re-lock any paywalled job tied to that charge.
+        # Prevents the "refunded customer still sees the PN" leak.
+        payment_intent_id = obj.get("payment_intent") or ""
+        amount_refunded = obj.get("amount_refunded") or 0
+        amount = obj.get("amount") or 0
+        fully_refunded = amount_refunded >= amount and amount > 0
+        if fully_refunded and payment_intent_id:
+            try:
+                db.relock_jobs_by_payment_intent(payment_intent_id)
+                log.info(
+                    "Charge fully refunded — relocked jobs tied to PI %s",
+                    payment_intent_id,
+                )
+            except Exception as exc:  # noqa: BLE001
+                log.warning("relock_jobs_by_payment_intent failed: %s", exc)
+
+    elif event_type == "charge.dispute.created":
+        # A customer disputed the charge — re-lock + log for manual review.
+        payment_intent_id = obj.get("payment_intent") or ""
+        if payment_intent_id:
+            try:
+                db.relock_jobs_by_payment_intent(payment_intent_id)
+                log.warning(
+                    "Charge disputed — relocked jobs tied to PI %s; review in Stripe",
+                    payment_intent_id,
+                )
+            except Exception as exc:  # noqa: BLE001
+                log.warning("relock on dispute failed: %s", exc)
 
     return {"received": True}
 
