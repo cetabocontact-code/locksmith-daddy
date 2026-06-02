@@ -404,7 +404,7 @@
         }
         setStep('step-decode', 'active', 'Loading vehicle details…');
         startElapsed();
-        pollTimer = setInterval(pollJob, 4000);
+        pollTimer = setInterval(pollJob, 2000);
         pollJob();  // first poll immediately so result-already-ready jobs
                     // surface the paywall panel within ~1 second
       }
@@ -439,7 +439,7 @@
           $('progress-panel').style.display = 'block';
           setStep('step-decode', 'active', 'Decoding VIN from NHTSA…');
           startElapsed();
-          pollTimer = setInterval(pollJob, 4000);
+          pollTimer = setInterval(pollJob, 2000);
           pollJob();  // first poll immediately
         } catch (err) {
           showError('Network error — please retry.');
