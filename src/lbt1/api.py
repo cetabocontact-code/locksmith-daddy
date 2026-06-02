@@ -100,17 +100,72 @@ async def index(request: Request) -> HTMLResponse:
 
 @app.get("/me", response_class=HTMLResponse)
 async def member_dashboard(request: Request) -> HTMLResponse:
-    """Signed-in member dashboard — lookup history, credit balance,
-    account settings. The old `index.html` content."""
+    """Signed-in member dashboard — paid VIN history (from lookup_jobs),
+    credit balance, account settings. Replaces the legacy index.html
+    template which was tied to the deprecated $79/mo subscription model.
+    """
     user = auth.current_user_or_none(request)
     if user is None:
         return RedirectResponse("/signin?next=/me", status_code=status.HTTP_303_SEE_OTHER)
+
+    # Defensive auto-link on every dashboard load — if the user paid for
+    # VINs anonymously and only LATER signed in (without re-running the
+    # signin flow since we added auto-link there), pick up those jobs too.
+    try:
+        db.attach_jobs_by_email_to_user(user["email"], int(user["id"]))
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Dashboard auto-link skipped: %s", exc)
+
+    jobs = db.list_paid_jobs_for_user(int(user["id"]))
+    credit_balance = db.get_credit_balance(int(user["id"]))
+
+    # Compute total spent: $7.99 per single-VIN unlock visible. We don't
+    # track per-job amount on lookup_jobs (no need — Stripe is the
+    # source of truth) so this is an estimate based on row count.
+    paid_count = len(jobs)
+    total_spent = f"{(paid_count * 7.99):.2f}"
+
+    if not jobs:
+        lookups_html = (
+            "<div class='empty'>"
+            "<p>No paid VIN lookups yet.</p>"
+            "<p><a href='/'>Run your first lookup →</a></p>"
+            "</div>"
+        )
+    else:
+        rows = []
+        for j in jobs:
+            vlabel = " ".join(
+                str(x) for x in [
+                    j.get("vehicle_year"), j.get("vehicle_make"),
+                    j.get("vehicle_model"), j.get("vehicle_trim"),
+                ] if x
+            ).strip() or "Vehicle"
+            vin = j.get("vin") or ""
+            paid_at = (j.get("paid_at") or "")[:10]
+            pn = j.get("primary_pn") or ""
+            jid = j.get("job_id") or ""
+            rows.append(
+                "<div class='lookup-row'>"
+                "<div>"
+                f"<div class='vehicle'>{vlabel}</div>"
+                f"<div class='meta'>VIN <span style='font-family:monospace;'>{vin}</span> · Paid {paid_at}</div>"
+                f"<div class='pn'>{pn}</div>"
+                "</div>"
+                "<div class='actions'>"
+                f"<a class='view-btn' href='/result/{jid}'>View full result →</a>"
+                "</div>"
+                "</div>"
+            )
+        lookups_html = "".join(rows)
+
     return _render(
-        "index.html",
-        user_display=user["full_name"] or user["email"],
+        "dashboard.html",
         user_email=user["email"],
-        total_lookups=user["total_lookups"],
-        total_seconds=user["total_lookup_seconds"],
+        paid_count=paid_count,
+        total_spent=total_spent,
+        credit_balance=credit_balance,
+        lookups_html=lookups_html,
     )
 
 
@@ -129,12 +184,21 @@ async def signin_submit(
     password: str = Form(...),
 ) -> Response:
     try:
-        _, token = auth.signin(email=email, password=password)
+        user_row, token = auth.signin(email=email, password=password)
     except auth.AuthError as exc:
         return RedirectResponse(
             f"/signin?error={_url_quote(str(exc))}", status_code=status.HTTP_303_SEE_OTHER
         )
-    redir = RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+    # Auto-link any previously-paid anonymous jobs that used this email
+    # → they now appear in /me dashboard. Best-effort, silent.
+    try:
+        if user_row and user_row.get("id"):
+            attached = db.attach_jobs_by_email_to_user(email, int(user_row["id"]))
+            if attached:
+                log.info("Signin auto-linked %d paid jobs to user %s", attached, email)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Auto-link jobs on signin failed: %s", exc)
+    redir = RedirectResponse("/me", status_code=status.HTTP_303_SEE_OTHER)
     _set_session_cookie(redir, token)
     return redir
 
@@ -200,7 +264,26 @@ async def signup_submit(
     except Exception as exc:  # noqa: BLE001
         log.warning("Post-signup email best-effort failed: %s", exc)
 
-    redir = RedirectResponse("/verify-email", status_code=status.HTTP_303_SEE_OTHER)
+    # Auto-link any prior paid jobs by email (for users who paid first,
+    # then later created an account).
+    try:
+        attached = db.attach_jobs_by_email_to_user(email, user_id)
+        if attached:
+            log.info("Signup auto-linked %d paid jobs to user %s", attached, email)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Auto-link jobs on signup failed: %s", exc)
+
+    # If the user came from the create-account upsell on /result/{job_id},
+    # also explicitly attach that specific job (covers the rare case where
+    # the email didn't match — e.g. they signed up with a different email).
+    attach_job_id = (request.query_params.get("attach_job") or "").strip()
+    if attach_job_id:
+        try:
+            db.attach_job_to_user(attach_job_id, user_id)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Explicit attach_job failed: %s", exc)
+
+    redir = RedirectResponse("/me", status_code=status.HTTP_303_SEE_OTHER)
     _set_session_cookie(redir, token)
     return redir
 
@@ -475,6 +558,17 @@ async def stripe_webhook(request: Request) -> dict:
                     "Stripe webhook: job %s marked paid (newly=%s, kind=%s)",
                     job_id, newly_paid, kind,
                 )
+                # Send the customer their receipt + the PN immediately.
+                # Best-effort — never blocks webhook 200 response.
+                if newly_paid:
+                    try:
+                        _send_purchase_receipt_for_job(
+                            job_id=job_id, session_id=session_id,
+                            kind=kind,
+                            amount_cents=int(obj.get("amount_total") or 799),
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        log.warning("Receipt email failed for job %s: %s", job_id, exc)
                 # If 10-pack was purchased on top of a single-VIN unlock, the
                 # extra 9 credits accrue once they create an account. We
                 # record the pending purchase; grant on account creation.
@@ -949,6 +1043,42 @@ async def _run_anonymous_lookup_job(job_id: str, vin: str, email: str | None) ->
             _send_result_email(email, job_id, profile, verified=False, error=True)
         except Exception:  # noqa: BLE001
             pass
+
+
+def _send_purchase_receipt_for_job(
+    *, job_id: str, session_id: str, kind: str | None, amount_cents: int,
+) -> None:
+    """Send the customer their dealer-verified PN + receipt by email.
+    Called from the Stripe webhook after mark_job_paid succeeds."""
+    paid_result = db.get_lookup_job_paid_result(job_id)
+    if not paid_result:
+        return
+    # Pull captured email from the job row
+    with db.get_db() as d:
+        row = d.execute(
+            "SELECT email FROM lookup_jobs WHERE job_id = ?", (job_id,),
+        ).fetchone()
+        email = (row["email"] if row else None) or ""
+    if not email:
+        return
+    vehicle_label = " ".join(
+        str(x) for x in [
+            paid_result.get("vehicle_year"), paid_result.get("vehicle_make"),
+            paid_result.get("vehicle_model"), paid_result.get("vehicle_trim"),
+        ] if x
+    ).strip()
+    result_url = f"{config.BASE_URL.rstrip('/')}/result/{job_id}"
+    notifications.send_purchase_receipt(
+        to=email,
+        vehicle_label=vehicle_label or "your vehicle",
+        primary_pn=paid_result.get("primary_pn") or "(missing)",
+        dealer_url=paid_result.get("dealer_url") or "",
+        alt_pns=paid_result.get("alt_pns") or [],
+        amount_cents=amount_cents,
+        kind=kind or "single",
+        result_url=result_url,
+        stripe_session_id=session_id,
+    )
 
 
 def _send_result_email(

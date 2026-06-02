@@ -1413,12 +1413,70 @@ def mark_job_paid(job_id: str, stripe_session_id: str) -> bool:
 
 def attach_job_to_user(job_id: str, user_id: int) -> None:
     """When a user creates an account after paying, link the job to their
-    history so it shows on /dashboard."""
+    history so it shows on /me."""
     with get_db() as db:
         db.execute(
             "UPDATE lookup_jobs SET user_id = ? WHERE job_id = ?",
             (user_id, job_id),
         )
+
+
+def attach_jobs_by_email_to_user(email: str, user_id: int) -> int:
+    """Bulk-link any paid lookup_jobs that carry this email to the user
+    after they sign in / sign up. Returns count attached. Used so a
+    user who paid before creating an account auto-gets their history
+    when they later sign up with the same email."""
+    if not email:
+        return 0
+    with get_db() as db:
+        cur = db.execute(
+            """
+            UPDATE lookup_jobs
+            SET user_id = ?
+            WHERE email = ? AND user_id IS NULL AND paid_at IS NOT NULL
+            """,
+            (user_id, email.strip().lower()),
+        )
+        return cur.rowcount or 0
+
+
+def list_paid_jobs_for_user(user_id: int, limit: int = 100) -> list[dict]:
+    """Return the user's paid VIN unlocks for the /me dashboard. Includes
+    the VIN, vehicle, PN, dealer URL, date, and the result-page URL."""
+    with get_db() as db:
+        rows = db.execute(
+            """
+            SELECT job_id, vin, vehicle_year, vehicle_make, vehicle_model,
+                   vehicle_trim, primary_pn, dealer_url, paid_at, created_at
+            FROM lookup_jobs
+            WHERE user_id = ? AND paid_at IS NOT NULL
+            ORDER BY paid_at DESC
+            LIMIT ?
+            """,
+            (user_id, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def list_paid_jobs_by_email(email: str, limit: int = 100) -> list[dict]:
+    """Return paid VIN unlocks tied to an email (whether or not the email
+    has been promoted into a user account yet). Useful as a one-time
+    backstop for the /lookup-history-by-email recovery flow."""
+    if not email:
+        return []
+    with get_db() as db:
+        rows = db.execute(
+            """
+            SELECT job_id, vin, vehicle_year, vehicle_make, vehicle_model,
+                   vehicle_trim, primary_pn, dealer_url, paid_at, created_at
+            FROM lookup_jobs
+            WHERE email = ? AND paid_at IS NOT NULL
+            ORDER BY paid_at DESC
+            LIMIT ?
+            """,
+            (email.strip().lower(), limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
 
 def complete_purchase(

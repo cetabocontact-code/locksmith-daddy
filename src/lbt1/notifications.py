@@ -248,6 +248,59 @@ def send_newsletter_confirmation(*, to: str, full_name: str) -> bool:
     return send(to, "Subscribed to Locksmith Daddy updates", body)
 
 
+def send_purchase_receipt(
+    *, to: str, vehicle_label: str, primary_pn: str,
+    dealer_url: str, alt_pns: list[str] | None,
+    amount_cents: int, kind: str, result_url: str,
+    stripe_session_id: str,
+) -> bool:
+    """Email the customer their purchase receipt + the dealer-verified PN.
+
+    Sent immediately after Stripe webhook fires `checkout.session.completed`
+    and we've marked the job paid. Includes the PN + dealer URL so they
+    have a permanent record outside the web app, plus a link back to the
+    /result page where they can re-access it.
+    """
+    dollars = f"${amount_cents / 100:.2f}"
+    label = (
+        "single VIN unlock"
+        if kind == "single"
+        else "10-pack of VIN unlocks (1 used now, 9 credits in your account)"
+        if kind == "ten"
+        else "VIN unlock"
+    )
+    alt_lines = ""
+    if alt_pns:
+        alt_lines = (
+            "\nAlternate part numbers the dealer also lists for this vehicle:\n"
+            + "\n".join(f"  - {p}" for p in alt_pns) + "\n"
+        )
+    body = (
+        f"Thanks for your purchase.\n\n"
+        f"VEHICLE: {vehicle_label}\n"
+        f"DEALER-VERIFIED OEM PART NUMBER: {primary_pn}\n"
+        f"{alt_lines}"
+        f"DEALER PROOF-OF-FITMENT URL: {dealer_url}\n\n"
+        f"RECEIPT\n"
+        f"  Item:           {label}\n"
+        f"  Charge:         {dollars} USD\n"
+        f"  Stripe session: {stripe_session_id}\n\n"
+        f"You can re-access this result any time at:\n"
+        f"  {result_url}\n\n"
+        f"If you create a free account (no license required), this VIN "
+        f"will appear in your dashboard automatically. Sign up at:\n"
+        f"  {result_url.split('/result/')[0]}/signup\n\n"
+        f"Questions? Reply to this email or contact contact@locksmithdaddy.us.\n\n"
+        f"— Locksmith Daddy\n"
+        f"   a Cetabo LLC venture\n"
+    )
+    return send(
+        to,
+        f"Your Locksmith Daddy result: {primary_pn} for {vehicle_label}",
+        body,
+    )
+
+
 def send_enterprise_lead_notification(
     *, company: str, contact_name: str, contact_email: str, phone: str,
     role: str, monthly_volume: str, notes: str,
