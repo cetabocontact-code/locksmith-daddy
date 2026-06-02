@@ -20,6 +20,10 @@ from lbt1.scrapers.hyundaioempart import HyundaiOemPartDriver
 from lbt1.scrapers.experimental_makes import (
     AcuraOempartsDriver,
     AcuraPartsWarehouseDriver,
+    AudiOempartsDriver,
+    BMWOempartsDriver,
+    FordOempartsDriver,
+    GMOempartsDriver,
     HondaOempartsDriver,
     HondaPartsNowDriver,
     InfinitiOempartsDriver,
@@ -28,10 +32,15 @@ from lbt1.scrapers.experimental_makes import (
     LexusPartsNowDriver,
     MazdaOempartsDriver,
     MazdaPartsGiantDriver,
+    MitsubishiOempartsDriver,
+    MoparOempartsDriver,
     NissanOempartsDriver,
     NissanPartsDealDriver,
+    PorscheOempartsDriver,
     SubaruOempartsDriver,
     SubaruPartsDealDriver,
+    VolkswagenOempartsDriver,
+    VolvoOempartsDriver,
 )
 from lbt1.scrapers.kia import KiaOempartsDriver
 from lbt1.scrapers.known_pn_probe import KnownPnProbeDriver
@@ -283,6 +292,55 @@ def _drivers_for_make(make: str) -> list[type]:
     if m == "mazda" and _on("LBT1_ENABLE_MAZDA"):
         return [MazdaOempartsDriver, MazdaPartsGiantDriver,
                 DuckDuckGoSearchFallbackDriver, KnownPnProbeDriver]
+
+    # ─── Big-3 Detroit (Ford + GM + Stellantis = ~39% US market) ─────────
+
+    if m in ("ford", "lincoln") and _on("LBT1_ENABLE_FORD"):
+        # No lincoln.oempartsonline.com — both brands route through Ford
+        return [FordOempartsDriver, DuckDuckGoSearchFallbackDriver,
+                KnownPnProbeDriver]
+
+    if m in ("chevrolet", "buick", "cadillac", "gmc") and _on("LBT1_ENABLE_GM"):
+        # No per-brand subdomains exist — all GM routes through gm.oempartsonline.com
+        return [GMOempartsDriver, DuckDuckGoSearchFallbackDriver,
+                KnownPnProbeDriver]
+
+    if m in ("chrysler", "dodge", "jeep", "ram", "fiat") and _on("LBT1_ENABLE_STELLANTIS"):
+        # No per-brand subdomains — all Stellantis routes through mopar.oempartsonline.com
+        return [MoparOempartsDriver, DuckDuckGoSearchFallbackDriver,
+                KnownPnProbeDriver]
+    # NHTSA sometimes returns "RAM TRUCKS" (multi-word) — normalize that too
+    if m == "ram trucks" and _on("LBT1_ENABLE_STELLANTIS"):
+        return [MoparOempartsDriver, DuckDuckGoSearchFallbackDriver,
+                KnownPnProbeDriver]
+
+    # ─── European luxury / volume ────────────────────────────────────────
+
+    if m in ("volkswagen", "vw") and _on("LBT1_ENABLE_VW"):
+        return [VolkswagenOempartsDriver, AudiOempartsDriver,  # shared platforms
+                DuckDuckGoSearchFallbackDriver, KnownPnProbeDriver]
+
+    if m == "audi" and _on("LBT1_ENABLE_AUDI"):
+        return [AudiOempartsDriver, VolkswagenOempartsDriver,  # adjacent
+                DuckDuckGoSearchFallbackDriver, KnownPnProbeDriver]
+
+    if m == "porsche" and _on("LBT1_ENABLE_PORSCHE"):
+        return [PorscheOempartsDriver, AudiOempartsDriver,  # shared on some platforms
+                DuckDuckGoSearchFallbackDriver, KnownPnProbeDriver]
+
+    if m in ("bmw", "mini") and _on("LBT1_ENABLE_BMW"):
+        # No mini.oempartsonline.com — both brands route through bmw.oempartsonline.com
+        return [BMWOempartsDriver, DuckDuckGoSearchFallbackDriver,
+                KnownPnProbeDriver]
+
+    if m == "volvo" and _on("LBT1_ENABLE_VOLVO"):
+        return [VolvoOempartsDriver, DuckDuckGoSearchFallbackDriver,
+                KnownPnProbeDriver]
+
+    if m == "mitsubishi" and _on("LBT1_ENABLE_MITSUBISHI"):
+        return [MitsubishiOempartsDriver, DuckDuckGoSearchFallbackDriver,
+                KnownPnProbeDriver]
+
     return []
 
 

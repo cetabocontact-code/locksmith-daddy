@@ -118,6 +118,46 @@ _MAKE_CONFIG: dict[str, list[tuple[str, tuple[str, ...]]]] = {
     "mazda": [
         ("mazda.oempartsonline.com", ("KD45", "GHP9", "GHR9", "BBM4", "BHN9")),
     ],
+    # ─── Big-3 Detroit ────────────────────────────────────────────────
+    "ford":    [("ford.oempartsonline.com", ("164R", "BC3Z", "AA6T", "DS7T", "FL3T"))],
+    "lincoln": [("ford.oempartsonline.com", ("164R", "BC3Z", "DS7T"))],
+    "chevrolet": [("gm.oempartsonline.com",
+                   ("13598", "13509", "13577", "13594", "22XX", "8475"))],
+    "buick":     [("gm.oempartsonline.com", ("13598", "13509", "13577"))],
+    "cadillac":  [("gm.oempartsonline.com", ("13598", "13509", "13577", "13530"))],
+    "gmc":       [("gm.oempartsonline.com", ("13598", "13509", "13577", "13594"))],
+    "chrysler":  [("mopar.oempartsonline.com", ("68", "56038", "56046"))],
+    "dodge":     [("mopar.oempartsonline.com", ("68", "56038", "56046"))],
+    "jeep":      [("mopar.oempartsonline.com", ("68", "56038", "56046"))],
+    "ram":       [("mopar.oempartsonline.com", ("68", "56038", "56046"))],
+    "ram trucks": [("mopar.oempartsonline.com", ("68", "56038", "56046"))],
+    "fiat":      [("mopar.oempartsonline.com", ("68", "56038", "56046"))],
+    # ─── European ─────────────────────────────────────────────────────
+    "volkswagen": [
+        ("vw.oempartsonline.com",   ("5G0", "3G0", "5C0", "1K0", "5K0", "7E0")),
+        ("audi.oempartsonline.com", ("8K0", "8R0", "4G0", "4M0")),  # platform-shared
+    ],
+    "vw": [
+        ("vw.oempartsonline.com", ("5G0", "3G0", "5C0", "1K0", "5K0", "7E0")),
+    ],
+    "audi": [
+        ("audi.oempartsonline.com", ("8K0", "8R0", "4G0", "4M0", "4F0", "8V0")),
+    ],
+    "porsche": [
+        ("porsche.oempartsonline.com", ("970", "971", "991", "992", "9Y0", "95B")),
+    ],
+    "bmw": [
+        ("bmw.oempartsonline.com", ("66", "61", "51", "9265")),
+    ],
+    "mini": [
+        ("bmw.oempartsonline.com", ("66", "61", "51")),
+    ],
+    "volvo": [
+        ("volvo.oempartsonline.com", ("3149", "3164", "3074", "3140", "316")),
+    ],
+    "mitsubishi": [
+        ("mitsubishi.oempartsonline.com", ("8637A", "MR4", "6370A", "8307A")),
+    ],
 }
 
 
@@ -506,17 +546,47 @@ class DuckDuckGoSearchFallbackDriver:
             raw = m.group(1)
             return f"{raw[:5]}-{raw[5:]}".upper()
 
-        # 5. Standard: 5-digit + 4-8 alphanumerics
-        # Catches: 95440AA501 (Hyundai/Kia), 8907006791 (Toyota),
-        #          57497AA001 (Subaru)
+        # 4b. Mopar / Stellantis: 68-prefix + 6 digits + optional 2-letter
+        # revision (e.g., 68416786ae). Must fire BEFORE the 5d+alphanum
+        # fallback otherwise the standard pattern adds a wrong dash.
         m = re.search(
-            r"/oem-parts/[^/]*?(\d{5}[a-z0-9]{4,8})(?:[?#]|$)", url_lc,
+            r"/oem-parts/[^/]*?\b(68\d{6}[a-z]{0,2})(?:[?#]|$)", url_lc,
+        )
+        if m:
+            return m.group(1).upper()
+
+        # 4c. Ford BC3Z-style engineering number: 3 alphanum + Z + mixed
+        # alphanum body (e.g., bc3z15k601a → BC3Z-15K601-A). Must also
+        # fire before the standard 5d pattern.
+        m = re.search(
+            r"/oem-parts/[^/]*?([a-z0-9]{3}z[a-z0-9]{4,8})(?:[?#]|$)", url_lc,
+        )
+        if m and len(m.group(1)) >= 8:
+            return m.group(1).upper()
+
+        # 5. Standard: 5-digit + 4-8 alphanumerics with AT LEAST ONE
+        # letter in the suffix. Catches: 95440AA501 (Hyundai/Kia),
+        # 57497AB001 (Subaru). The "at least one letter" constraint
+        # prevents this from gobbling pure-digit makes (GM, BMW, Volvo,
+        # Mopar 8-digit) and producing wrong-shape dashed PNs.
+        m = re.search(
+            r"/oem-parts/[^/]*?(\d{5}(?=[a-z0-9]{0,8}[a-z])[a-z0-9]{4,8})(?:[?#]|$)",
+            url_lc,
         )
         if m:
             raw = m.group(1)
-            if len(raw) >= 6 and raw[:5].isdigit():
-                return f"{raw[:5]}-{raw[5:]}".upper()
-            return raw.upper()
+            return f"{raw[:5]}-{raw[5:]}".upper()
+
+        # 5b. Toyota older format: pure 5d+5d (e.g., 8907006791). Only
+        # fires after the alphanumeric-required pattern in (5) misses,
+        # so it doesn't conflict with BMW/GM/Volvo pure-digit SKUs which
+        # are caught by pattern (7) below.
+        m = re.search(
+            r"/oem-parts/toyota-[^/]*?(89\d{8})(?:[?#]|$)", url_lc,
+        )
+        if m:
+            raw = m.group(1)
+            return f"{raw[:5]}-{raw[5:]}".upper()
 
         # 6. Nissan/Infiniti 285E3-XXXXX: 3-digit + letter + digit + 4-5 alphanum
         # The 285E3 prefix isn't pure-5-digit so the standard pattern misses it.
@@ -525,6 +595,24 @@ class DuckDuckGoSearchFallbackDriver:
         )
         if m:
             return f"{m.group(1)}-{m.group(2)}".upper()
+
+        # 7. BMW / Mercedes: 8-11 digit numeric SKU (e.g., 51453427411,
+        # 66126911522). Pure-digit fallback for makes with no dash.
+        m = re.search(
+            r"/oem-parts/[^/]*?-(\d{8,11})(?:[?#]|$)", url_lc,
+        )
+        if m:
+            return m.group(1)
+
+        # 8. VW / Audi / Porsche group format: 3-char prefix + 6-digit core
+        # + optional revision letter (e.g., 5g0959752m, 4g0959754a). The
+        # prefix must contain at least one letter to distinguish from pure-
+        # numeric BMW SKUs.
+        m = re.search(
+            r"/oem-parts/[^/]*?-([a-z0-9]{3}\d{6}[a-z]?)(?:[?#]|$)", url_lc,
+        )
+        if m and any(c.isalpha() for c in m.group(1)[:3]):
+            return m.group(1).upper()
 
         # 6. Title fallback — covers all the patterns above as printed text
         for pat in [

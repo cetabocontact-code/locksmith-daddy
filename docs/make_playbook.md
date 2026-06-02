@@ -95,30 +95,41 @@ These were proven on Hyundai/Kia/Genesis/Toyota and apply universally:
 Status = `live` (serving real lookups), `staged` (driver wired, opt-in),
 `research` (5-question framework partially done), or `none` (no work yet).
 
-| Make | Dealer CMS | PN family | Status | Notes |
+**MAJOR DISCOVERY 2026-06-01** — DNS probe of oempartsonline.com
+revealed 10 additional makes have Revolution Parts subdomains (same
+CMS, same code pattern, no new driver class needed beyond a one-line
+subclass). The expansion now covers ~85% of US market via a single
+unified scraping architecture.
+
+| Make | Dealer subdomain | PN family | Status | Notes |
 |---|---|---|---|---|
-| **Hyundai** | Revolution Parts | `95440-XXXXX`, `95430-XXXXX` | ✅ live | 100% 2019–2025 on 77/77 audit |
-| **Kia** | Revolution Parts | `95440-XXXXX`, `95430-XXXXX`, `95431-XXXXX` | ✅ live | 100% 2019–2025 on 40/40 audit |
-| **Genesis** | Revolution Parts | `95440-XXXXX` (G70, GV70 etc.) | ✅ live | Small sample (2/2); G70 family confirmed |
-| **Toyota** | Revolution Parts | `89070`, `89904`, `89742`, **`8990H`** | ✅ live | 8990H is the 2025+ smart-key family — critical to include |
-| **Lexus** | Revolution Parts → Toyota dealer fallback | `89070`, `89904`, `8990H` | 🔬 staged | Same backend as Toyota; expect similar coverage profile |
-| **Honda** | Revolution Parts (TBD) → hondapartsnow.com (PartsDeal) | `35118-XXX-XXX`, `72147-XXX-XXX` | 🔬 staged | Honda uses 3-segment hyphen PN format — regex update required |
-| **Acura** | Revolution Parts (TBD) → acurapartsnow.com (PartsDeal) | `35118-XXX-XXX`, `72147-XXX-XXX` | 🔬 staged | Same family as Honda |
-| **Nissan** | Revolution Parts (TBD) → parts.nissanusa.com | `285E3-XXXXX` | 🔬 staged | Strong consistent prefix |
-| **Infiniti** | parts.infinitiusa.com → nissanpartsdeal.com | `285E3-XXXXX` | 🔬 staged | Same family as Nissan |
-| **Ford** | fordparts.com → fordpartsgiant.com | `164-RXXXX` (Rotunda), `5929XXX` (Strattec) | 🔬 staged | "164-R" is the dealer-facing PN, dual numbering required |
-| **Lincoln** | Ford-group | `164-RXXXX` | 🔬 staged | Same family as Ford |
-| **GM** (Chevy/Buick/Cadillac/GMC) | gmpartsgiant.com → parts-catalog.acdelco.com | `13598XXX`, `25...`, `134...` (varies by brand) | 🔬 staged | Cross-brand PNs vary; brand-specific drivers may be needed |
-| **Stellantis** (Chrysler/Dodge/Jeep/Ram) | moparpartsgiant.com → Mopar OEM | `68XXXAAA` (Mopar PN format) | 🔬 staged | Same backend; 4 brands one driver |
-| **Subaru** | parts.subaru.com → subarupartsdeal.com | `57497AXXXXX` | 🔬 staged | Subaru-specific format |
-| **Mazda** | mazda-parts-dealer.com | `KD45-67-5DY` (3-segment hyphen) | 🔬 staged | Honda-like multi-segment PN — needs regex update |
-| **Mitsubishi** | mitsubishiparts.com | `8637AXXX`, `MR4...` | 🔬 staged | Smaller volume |
-| **Volkswagen** | eeuroparts.com → VW dealer-specific | `5G0959752M`-style (no consistent prefix) | 🔬 staged | VW format is awkward — no clean prefix |
-| **Audi** | eeuroparts.com (shares with VW) | similar to VW | 🔬 staged | Cross-brand with VW |
-| **BMW** | Proprietary BMW PuMA (paid) | Hex SKU | ⏳ research | BMW often requires PuMA dealer login |
-| **Mercedes-Benz** | Proprietary EPC (WIS/STAR) | `A164...`-style | ⏳ research | Mercedes requires STAR dealer access |
-| **Volvo** | volvopartsdirect.com | `316...`-style | ⏳ research | |
-| **Porsche** | porschepartsexpress.com | `9P1...`-style | ⏳ research | Same family as Audi sometimes |
+| **Hyundai** | hyundai.oempartsonline.com (+ hyundaioempart.com + Canada SimplePart) | `95440-XXXXX`, `95430-XXXXX` | ✅ live | 100% 2019–2025 on 77/77 audit |
+| **Kia** | kia.oempartsonline.com (+ parts.kia.com SimplePart) | `95440-XXXXX`, `95430-XXXXX`, `95431-XXXXX` | ✅ live | 100% 2019–2025 on 40/40 audit |
+| **Genesis** | genesis.oempartsonline.com (+ Hyundai adjacent) | `95440-XXXXX` (G70/GV70/etc.) | ✅ live | Small sample (2/2); G70 family confirmed |
+| **Toyota** | toyota.oempartsonline.com | `89070`, `89904`, `89742`, **`8990H`** | ✅ live | 8990H is the 2025+ smart-key family |
+| **Lexus** | lexus.oempartsonline.com (+ Toyota adjacent) | `89070`, `89904`, `8990H` | 🟡 enabled | DNS-confirmed; awaiting first-VIN validation |
+| **Honda** | honda.oempartsonline.com (+ hondapartsnow.com) | `72147-XXX-XXX`, `35118-XXX-XXX`, `35880-XXX-XXX` | 🟡 enabled | 3-segment hyphen PN, regex handles |
+| **Acura** | acura.oempartsonline.com (+ Honda adjacent) | same as Honda | 🟡 enabled | Adjacent fallback to Honda |
+| **Nissan** | nissan.oempartsonline.com (+ nissanpartsdeal.com) | `285E3-XXXXX`, `28268`, `28630` | 🟡 enabled | |
+| **Infiniti** | infiniti.oempartsonline.com (+ Nissan adjacent) | same as Nissan | 🟡 enabled | |
+| **Subaru** | subaru.oempartsonline.com (+ subarupartsdeal.com) | `57497AXXXXX`, `88835`, `88036` | 🟡 enabled | |
+| **Mazda** | mazda.oempartsonline.com (+ mazdapartsgiant.com) | `KD45-67-5DY` (3-segment), `GHP9`, `GHR9`, `BBM4`, `BHN9` | 🟡 enabled | 3-segment hyphen PN, regex handles |
+| **Ford** | ford.oempartsonline.com | `164R`, `BC3Z`, `AA6T`, `DS7T`, `FL3T` | 🟡 enabled | Covers Lincoln too (no Lincoln subdomain) |
+| **Lincoln** | (routes through Ford) | `164R`, `BC3Z`, `DS7T` | 🟡 enabled | Adjacent to Ford |
+| **GM** (Chevy/Buick/Cadillac/GMC) | gm.oempartsonline.com | `13598`, `13509`, `13577`, `13594`, `22XX` | 🟡 enabled | Single subdomain covers all 4 brands |
+| **Stellantis** (Jeep/Ram/Chrysler/Dodge/FIAT) | mopar.oempartsonline.com | `68XXXXXXAA` (8d + 2 opt revision letters), `56038`, `56046` | 🟡 enabled | Single subdomain covers all 4 brands |
+| **Volkswagen** | vw.oempartsonline.com (+ Audi adjacent) | `5G0`, `3G0`, `5C0`, `1K0`, `5K0`, `7E0` | 🟡 enabled | VW-Group format prefix+6d+letter |
+| **Audi** | audi.oempartsonline.com (+ VW adjacent) | `8K0`, `8R0`, `4G0`, `4M0`, `4F0`, `8V0` | 🟡 enabled | |
+| **Porsche** | porsche.oempartsonline.com (+ Audi adjacent) | `970`, `971`, `991`, `992`, `9Y0`, `95B` | 🟡 enabled | Model-line prefixes |
+| **BMW** | bmw.oempartsonline.com | 8-11 digit numeric SKU (e.g., `51453427411`) | 🟡 enabled | Covers Mini too |
+| **Mini** | (routes through BMW) | same as BMW | 🟡 enabled | Adjacent to BMW |
+| **Volvo** | volvo.oempartsonline.com | `3149`, `3164`, `3074`, `3140`, `316` (8d numeric) | 🟡 enabled | |
+| **Mitsubishi** | mitsubishi.oempartsonline.com | `8637A`, `MR4`, `6370A`, `8307A` | 🟡 enabled | |
+| **Mercedes-Benz** | (no subdomain — different CMS) | `A164...` style | ⏳ research | Mercedes runs proprietary STAR EPC; needs custom driver |
+
+To enable a make: `fly secrets set LBT1_ENABLE_<MAKE>=1`. Enabled
+flags as of 2026-06-01: all 18 makes above except Mercedes. After
+first-VIN validation per make, move ✅ live and update the table.
 
 ---
 
