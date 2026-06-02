@@ -357,6 +357,29 @@ class KnownPnProbeDriver:
                     )
                     break
 
+        # Multi-model dealer pages (mirrors DDG fallback logic): title or
+        # canonical body sentence has year-range + make (no model), and
+        # body mentions our model anywhere → page is for our model family.
+        if not fit_kind:
+            range_match = re.search(
+                rf"(\d{{4}})\s*[\-–—]\s*(\d{{4}})\s+{make_re}\s+\w+",
+                title_h1,
+            )
+            if not range_match:
+                range_match = re.search(
+                    rf"fit\s+your\s+(\d{{4}})\s*[\-–—]\s*(\d{{4}})\s+{make_re}\s+vehicle",
+                    body_text,
+                )
+            if range_match:
+                lo, hi = int(range_match.group(1)), int(range_match.group(2))
+                if lo <= year_int <= hi:
+                    if re.search(rf"\b{model_re}\b", body_text):
+                        fit_kind = (
+                            f"multi-model dealer page: title/canonical covers "
+                            f"{range_match.group(1)}-{range_match.group(2)}; "
+                            f"body mentions '{model_lc}'"
+                        )
+
         if not fit_kind:
             await self._emit(
                 f"KnownPN: no dealer attestation for {pn} on our year+make+model",

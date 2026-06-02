@@ -466,6 +466,49 @@ class DuckDuckGoSearchFallbackDriver:
                     )
                     break
 
+        # 3) Multi-model dealer pages: some dealer subdomains (notably
+        #    Lexus) publish "transmitter" pages that fit MULTIPLE models.
+        #    Title and canonical body sentence don't enumerate model — they
+        #    say things like "perfectly fit your 2023-2025 Lexus vehicle".
+        #    The fitment table inside the page only shows recent years
+        #    (e.g., shows 2024-2025 fitment rows even though title says
+        #    2023-2025).
+        #
+        #    Strict-but-pragmatic check: accept if the dealer's title or
+        #    canonical sentence has YEAR-RANGE covering our year + our
+        #    MAKE, AND the body mentions our MODEL name anywhere on the
+        #    page (proving this catalog page is for the right model
+        #    family — the dealer hasn't enumerated every year+model combo
+        #    but they've stated the year range and the page IS for our
+        #    model family).
+        if not fit_kind:
+            # Look for title/canonical year-range + make
+            title_range_re = (
+                rf"(\d{{4}})\s*[\-–—]\s*(\d{{4}})\s+{make_re}\s+\w+"
+            )
+            range_match = re.search(title_range_re, title_h1)
+            # Also accept canonical body sentence "fit your YYYY-YYYY make vehicle"
+            if not range_match:
+                range_match = re.search(
+                    rf"fit\s+your\s+(\d{{4}})\s*[\-–—]\s*(\d{{4}})\s+{make_re}\s+vehicle",
+                    text,
+                )
+            if range_match:
+                lo, hi = int(range_match.group(1)), int(range_match.group(2))
+                if lo <= year_int <= hi:
+                    # Body must mention our model somewhere. Use a lenient
+                    # pattern to handle dealer concatenations like "rx350"
+                    # (Lexus joins model + trim digits). Match model with
+                    # optional adjacent digit suffix and only a leading
+                    # word boundary.
+                    if re.search(rf"\b{model_re}(?:\d+)?\b", text):
+                        fit_kind = (
+                            f"multi-model dealer page: title/canonical "
+                            f"'{range_match.group(1)}-{range_match.group(2)} "
+                            f"{make_lc}' covers {year}; body mentions "
+                            f"'{model_lc}' as a covered model"
+                        )
+
         if not fit_kind:
             await self._emit(
                 "Candidate dropped (no dealer attestation for our year+make+model)",
